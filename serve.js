@@ -1,17 +1,17 @@
 #!/usr/bin/env node
 /* Local file server for the Hollia pages (production uses GitHub Pages instead).
 
-   node serve.js              http://localhost:8080
+   node serve.js              http://localhost:3000
    PORT=8090 node serve.js    another port; HOST (default 127.0.0.1) to open it to the network
 
    Serves this folder only. Never serves the backend (Hollia-backend/: keys, data, worlds) or
-   dotfiles (.git). Then log in with server "localhost:3000" (the backend: npm start in Hollia-backend/). */
+   dotfiles (.git). Then log in with server "localhost:3001" (the backend: npm start in Hollia-backend/). */
 
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
 
-const PORT = Number(process.env.PORT) || 8080;
+const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || "127.0.0.1";
 const ROOT = __dirname;
 const HIDDEN = new Set(["hollia-backend", "node_modules"]);

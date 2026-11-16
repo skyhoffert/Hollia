@@ -196,14 +196,22 @@ window.HolliaPack = (() => {
       return `<li><span class="mini">${art(id, false, t * 0.8, t * 0.8)}</span><span class="nm">${esc(d.name)} <span class="note">${d.w}x${d.h}</span>${count}</span>
         <span class="price">${price} ◉</span><button type="button" data-buy="${esc(id)}" ${inv.coins < price || left === 0 ? "disabled" : ""}>Buy</button></li>`;
     }).join("");
+    // What players sold here, for anyone to buy back (place.resale; 2x what he paid).
+    const resale = (place?.resale?.[shopOpen] || []).map((r) => {
+      const d = def(r.item);
+      return `<li><span class="mini">${art(r.item, false, t * 0.8, t * 0.8)}</span><span class="nm">${esc(d.name)} <span class="note">${d.w}x${d.h}</span></span>
+        <span class="price">${r.price} ◉</span><button type="button" data-buy-back="${esc(r.id)}" ${inv.coins < r.price ? "disabled" : ""}>Buy</button></li>`;
+    }).join("");
     return `<div class="area drop shop" data-drop="sell"><h3>${esc(shop.name)}</h3>
-      <ul>${rows}</ul><p class="note">${esc(shop.keeper || "They")} buys things too: drag something here, or pick it and press Sell.</p></div>`;
+      <ul>${rows}</ul>${resale ? `<h3>Bought from you</h3><ul>${resale}</ul>` : ""}
+      <p class="note">${esc(shop.keeper || "They")} buys things too: drag something here, or pick it and press Sell.</p></div>`;
   }
 
   function sellPrice(item) {
     const shop = world?.shops?.[shopOpen];
     if (!shop) return 0;
     if (shop.buys) return shop.buys[item] || 0;
+    if (place?.wants?.[shopOpen]?.[item] === 0) return 0; // had all he'll take (shop.buyLimit)
     const base = def(item).price || 0;
     return base > 0 ? Math.max(1, Math.floor(base * (shop.buyRate ?? 0.5))) : 0;
   }
@@ -226,6 +234,10 @@ window.HolliaPack = (() => {
     if (loc.from !== "bag") b.push(["stow", loc.from === "stash" ? "Take" : "Put in pack"]);
     if (own(loc) && stashOpen && place?.stashes[stashOpen]) b.push(["store", "Store"]);
     if (own(loc) && shopOpen && sellPrice(e.item)) b.push(["sell", `Sell for ${sellPrice(e.item)} ◉`]);
+    // A buy limit (shop.buyLimit), shared by everyone: how many more, or that he's had enough.
+    const wants = shopOpen && own(loc) ? place?.wants?.[shopOpen]?.[e.item] : null;
+    const keeper = world?.shops?.[shopOpen]?.keeper || "They";
+    const wantNote = wants == null ? "" : wants ? `${keeper} will buy ${wants} more of these.` : `${keeper} doesn't want any more of these.`;
     if (own(loc) && !shopOpen && !stashOpen && pileHere(e.item)) b.push(["putback", pileHere(e.item).action.find.backLabel || "Put back"]);
     const where = { bag: "in your pack", overflow: "doesn't fit", hand: loc.hand === "both" ? "in both hands" : `in your ${loc.hand} hand`,
                     stash: `in the ${(place?.stashes[loc.stash]?.name || "crate").toLowerCase()}` }[loc.from];
@@ -233,6 +245,7 @@ window.HolliaPack = (() => {
     return `<div class="sel-art">${art(e.item, false, 40, 40)}</div>
       <h3>${esc(d.name)}</h3><p class="note">${w}x${h} · ${esc(where)} · ${holdNote}</p>
       <p class="desc">${esc(d.desc)}</p>
+      ${wantNote ? `<p class="note">${esc(wantNote)}</p>` : ""}
       ${isSpell(e.item) ? (own(loc) && attuned(e)
         ? '<p class="attune on">✦ Attuned.</p>'
         : '<p class="attune off">Not attuned.</p>') : ""}
@@ -275,6 +288,7 @@ window.HolliaPack = (() => {
     }
     if (t.dataset.act) return act(t.dataset.act);
     if (t.dataset.buy) return request("buy", { shop: shopOpen, item: t.dataset.buy });
+    if (t.dataset.buyBack) return request("buy", { shop: shopOpen, resale: t.dataset.buyBack });
     if (t.dataset.coinsTake) {
       const where = t.dataset.coinsTake;
       const n = place.stashes[where.slice(6)]?.coins;

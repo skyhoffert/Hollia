@@ -9,5 +9,5 @@ tests, notes) is its own git repo in `Hollia-backend/`, ignored here via `.git/i
 - Paths: links go through `Hollia.root` (site root) or are relative, never `/...`: on GitHub Pages
   the site lives under `/<repo>/`.
 - Server <-> page messages: `PROTOCOL.md` (rules for changing it: `Hollia-backend/CLAUDE.md`).
-- Local: `node serve.js` (http://localhost:8080) plus the backend (`npm start` in `Hollia-backend/`).
+- Local: `node serve.js` (http://localhost:3000) plus the backend (`npm start` in `Hollia-backend/`).
 - Commit each repo separately: run git here for the frontend, in `Hollia-backend/` for the backend.

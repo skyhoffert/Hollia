@@ -41,7 +41,7 @@
 
   <form id="form">
     <label for="server">Server</label>
-    <input id="server" maxlength="200" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="e.g. 203.0.113.5:3000" required>
+    <input id="server" maxlength="200" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="e.g. 203.0.113.5:3001" required>
     <label for="key">Your key</label>
     <input id="key" maxlength="40" autocomplete="off" spellcheck="false" required>
     <div id="guest" hidden>
@@ -71,7 +71,7 @@
   // Server address: from the link (?server=...), else what this browser used last. Locally (a page on
   // localhost) it defaults to a backend on this machine. Never part of the site itself.
   if (q.get("server")) Hollia.setServer(q.get("server"));
-  $("server").value = Hollia.server() || (/^(localhost|127\.0\.0\.1)$/.test(location.hostname) ? "localhost:3000" : "");
+  $("server").value = Hollia.server() || (/^(localhost|127\.0\.0\.1)$/.test(location.hostname) ? "localhost:3001" : "");
   $("key").value = q.get("key") || store.get("hollia.key") || "";
   $("name").value = store.get("hollia.guestName") || "";
 

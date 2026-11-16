@@ -12,10 +12,10 @@ only in your browser. A link ending in `?server=<address>` fills it in.
 ## Running locally
 
 ```
-node serve.js        # http://localhost:8080 (PORT=... to change)
+node serve.js        # http://localhost:3000 (PORT=... to change)
 ```
 
-Log in with server `localhost:3000` (filled in automatically on localhost) while the game server
+Log in with server `localhost:3001` (filled in automatically on localhost) while the game server
 runs on this machine.
 
 ## Files

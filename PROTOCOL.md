@@ -11,7 +11,7 @@ protocol" at the end).
 
 - One WebSocket per page at `/ws` on the server: `wss://` when the page is https, `ws://` otherwise.
   The pages are hosted apart from the server (GitHub Pages), so they don't know where it is: the
-  player types its address on the login page (`1.2.3.4:3000`, `example.org`, `wss://example.org/ws`;
+  player types its address on the login page (`1.2.3.4:3001`, `example.org`, `wss://example.org/ws`;
   no path = `/ws`), or it comes in the link as `?server=...`. `Hollia.toWsUrl` in `client.js` turns it into the URL.
 - Plain HTTP `GET /` on the server answers `Hollia server` (a reachability check); nothing else is served over HTTP.
 - Every message is one JSON object with a string field `t` (its type). Anything else is ignored.
@@ -108,8 +108,10 @@ welcome {
   `art` = SVG markup in a `w*32` by `h*32` box. `hold`: which hands it takes.
 - **`<inv>`**: `{ coins, hands: { left?, right? } | { both }, bag: [<item>], overflow: [<item>], attuned: [id], lost: ["left"|"right"], flags: [string] }`.
   `<item>` = `{ id, item, at?: [x, y], turned? }` (`item` = catalog id; `at` only in the 3x3 bag).
-- **`<place>`**: `{ scene, stashes: { <stashId>: { name, coins, items: [<item>] } }, stock: { <shopId>: { <itemId>: n } } }`.
-  Stashes reachable from your scene right now; `stock` = limited shop items left.
+- **`<place>`**: `{ scene, stashes: { <stashId>: { name, coins, items: [<item>] } }, stock: { <shopId>: { <itemId>: n } }, wants?: { <shopId>: { <itemId>: n } }, resale?: { <shopId>: [{ id, item, price }] } }`.
+  Stashes reachable from your scene right now; `stock` = limited shop items left; `wants` = how many
+  more of an item a shop here will buy (shop `buyLimit`, shared by everyone; 0 = no more); `resale` = what
+  players sold a shop here, for anyone to buy back at 2x what it paid (a DM reset clears it).
 - **`<game>`**: one of
   - `{ try: <try> }`: a timing minigame in progress
   - `{ try: <try>, pending: { result, at } }`: lost, waiting for the DM's verdict
@@ -164,8 +166,8 @@ All need a session (`join` / `resume` first).
 | `find` | `hotspot` | pick up what a hotspot here holds |
 | `putback` | `id` | throw an item back on a pile here |
 | `offer` | `offering` | toss coins into `world.offerings.<id>` |
-| `buy` | `shop, item` | |
-| `sell` | `shop, id` | |
+| `buy` | `shop, item` or `shop, resale` | `resale`: an id from `place.resale`, something a player sold (anyone can buy it back) |
+| `sell` | `shop, id` | a limited item goes back in the shop's `stock`; anything it doesn't always sell goes on its `resale` list |
 
 `first: true` on the answer = the first time this find was picked up.
 
@@ -221,7 +223,7 @@ next `dm-state` (sent at most every 100 ms after any change). Failures come back
 | `reset-characters` | | every character back to the starting kit (no `activity`) |
 | `open` / `close` | | open or close the activity |
 | `freeze` | `move?, interact?, pack?` (booleans) | freeze / unfreeze |
-| `send-all` | | open it and move every roster player into it, at its start |
+| `send-all` | `scene?` | open it and move every roster player into it, at its start; `scene` (`id` or `id@pos`, as in the scenes `tool` move): there instead, and players already in it move there too |
 | `reset` | | the activity back to its start (inventories kept) |
 | `flags` | `player?, set?, unset?` | one player's flags; no `player` = `world.*` flags only |
 | `round` | `scene, op: start\|end\|say\|clear, seconds?, text?, hit?` | run timed rounds; `hit` plays the scene's hit sound |

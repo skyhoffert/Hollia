@@ -13,7 +13,7 @@
    Hollia.logout()                forget the session, back to the login page
    Hollia.versionProblem(msg)     welcome / dm-welcome from a server on another protocol
                                   version -> what to tell the player, else null
-   Hollia.server() / setServer(a) the game server's address, as the player typed it ("1.2.3.4:3000",
+   Hollia.server() / setServer(a) the game server's address, as the player typed it ("1.2.3.4:3001",
                                   "example.org", "wss://example.org/ws"). Kept only in this browser
                                   (localStorage): the pages are public, the address isn't in them.
    Hollia.wsUrl()                 that address as a WebSocket URL, or null if none is set
@@ -44,7 +44,7 @@ window.Hollia = (() => {
     serverMemory = String(addr || "").trim();
     try { serverMemory ? localStorage.setItem(SERVER, serverMemory) : localStorage.removeItem(SERVER); } catch {}
   }
-  // "1.2.3.4:3000" -> ws(s)://1.2.3.4:3000/ws. No scheme: wss on an https page (browsers block ws there).
+  // "1.2.3.4:3001" -> ws(s)://1.2.3.4:3001/ws. No scheme: wss on an https page (browsers block ws there).
   function toWsUrl(addr) {
     let a = String(addr || "").trim();
     if (!a) return null;

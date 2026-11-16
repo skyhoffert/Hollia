@@ -175,7 +175,7 @@ window.HolliaGame = (() => {
   // The coin goes under the middle shell, then the shuffle: swaps, faster and faster.
   function shellsShuffle() {
     sh.phase = "shuffle";
-    const LIFT = 70, n = 9 + Math.floor(Math.random() * 4);
+    const LIFT = 70, n = 20 + Math.floor(Math.random() * 6);
     const swaps = Array.from({ length: n }, () => { const a = Math.floor(Math.random() * 3); return [a, (a + 1 + Math.floor(Math.random() * 2)) % 3]; });
     // 0-700 ms: middle shell lifts, coin shown; 700-1200: drops over it; then the swaps.
     shellsAnim((t) => {
@@ -188,7 +188,7 @@ window.HolliaGame = (() => {
       let u = t - 1200;
       const order = [0, 1, 2], pos = SX.slice(); // order[slot] = the shell in that slot
       for (let k = 0; k < swaps.length; k++) {
-        const len = Math.max(150, 380 - k * 28);
+        const len = Math.max(110, 300 - k * 20);
         if (u >= len) { const [a, b] = swaps[k]; [order[a], order[b]] = [order[b], order[a]]; u -= len; continue; }
         const [a, b] = swaps[k], f = 0.5 - Math.cos(Math.PI * u / len) / 2;
         for (let i = 0; i < 3; i++) pos[i] = SX[order.indexOf(i)];

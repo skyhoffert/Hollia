@@ -126,7 +126,7 @@
     <p class="muted">Log in with the DM key (<code>node scripts/admin.js player list</code>,
       the entry marked [DM]).</p>
     <form id="loginForm">
-      <input id="server" autocomplete="off" spellcheck="false" placeholder="Server (e.g. 203.0.113.5:3000)" required>
+      <input id="server" autocomplete="off" spellcheck="false" placeholder="Server (e.g. 203.0.113.5:3001)" required>
       <input id="key" type="password" autocomplete="off" placeholder="DM key" required>
       <button class="primary" type="submit">Enter</button>
     </form>
@@ -157,7 +157,7 @@
     </section>
     <!-- Every character back to base (server: dm reset-characters). -->
     <section class="card">
-      <div class="head"><h2>Characters</h2><span class="muted">Reset all: everyone gets the starting kit back, both hands and feet, no afflictions or char.* flags, no attunements, and can find things again. Activities keep their own memory (use an activity's Reset for that).</span></div>
+      <div class="head"><h2>Characters</h2><span class="muted">Reset all: everyone gets the starting kit back, both hands and feet, no afflictions or char.* flags, no attunements, and can find things again. The crew's crate (shared by every activity) goes back to its start. Activities keep their own memory (use an activity's Reset for that).</span></div>
       <div class="row"><button id="resetChars">Reset all characters</button></div>
     </section>
     <section class="card" id="logcard">
@@ -219,6 +219,10 @@
     ws.onclose = () => { setStatus("offline"); setTimeout(connect, delay); delay = Math.min(delay * 2, 8000); };
   }
   const send = (activity, action) => ws?.readyState === 1 && ws.send(JSON.stringify({ t: "dm", activity, ...action }));
+  // Testing from the browser console: put a roamer at a stop of its route (default: its last) for
+  // `minutes`, e.g. dmRoam("harbor-test", "creature"). Then move a player there as usual.
+  window.dmRoam = (activity, roamer = "creature", stage = "last", minutes = 10) =>
+    send(activity, { do: "tool", action: { roam: roamer, stage, minutes } });
 
   /* ---------- render ---------- */
   // While a move dropdown is focused (maybe open), live updates wait: redrawing would close it.
@@ -288,7 +292,7 @@
         <div class="row">
           ${a.open ? `<button class="danger" data-do="close" data-act="${esc(a.id)}">Close</button>`
                    : `<button data-do="open" data-act="${esc(a.id)}">Open</button>`}
-          <button data-do="send-all" data-act="${esc(a.id)}" title="Open this and move every roster player here from other activities">Send everyone here</button>
+          <button data-do="send-all" data-act="${esc(a.id)}" title="Open this and move every roster player here from other activities (to the room picked in Move everyone to, if it has one; players already here go there too)">Send everyone here</button>
           <span class="spacer"></span>
           <button class="danger" data-do="reset" data-act="${esc(a.id)}" title="Everyone back to the start, all memory flags cleared, freezes lifted">Reset to start</button>
         </div>
@@ -715,8 +719,9 @@
         if (!confirm(`Reset ${actName(id)}? Everyone goes back to the start, all memory flags are cleared and freezes are lifted. This can't be undone.`)) return;
         return send(id, { do: "reset" });
       case "send-all":
-        if (!confirm(`Move every player into ${actName(id)}?`)) return;
-        return send(id, { do: "send-all" });
+        const to = field("all");
+        if (!confirm(`Move every player into ${actName(id)}${to ? " (" + to.selectedOptions[0]?.text + ")" : ""}?`)) return;
+        return send(id, { do: "send-all", ...(to ? { scene: to.value } : {}) });
       case "move-all": return send(id, { do: "tool", action: { move: "all", scene: field("all").value } });
     }
   });
@@ -800,7 +805,7 @@
   });
 
   $("resetChars").onclick = () => {
-    if (!confirm("Reset every character to base? Everyone gets the starting kit, lost hands and feet come back, afflictions, char.* flags and attunements are cleared. The play log keeps what they had.")) return;
+    if (!confirm("Reset every character to base? Everyone gets the starting kit, lost hands and feet come back, afflictions, char.* flags and attunements are cleared, and the crew's crate goes back to its start. The play log keeps what they had.")) return;
     ws?.readyState === 1 && ws.send(JSON.stringify({ t: "dm", do: "reset-characters" }));
     toast("Every character is back to base.");
   };

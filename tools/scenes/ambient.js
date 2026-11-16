@@ -90,9 +90,11 @@
   }
 
   // One-off clip (voice line, effect) over the ambience. A new clip cuts off the last one.
-  // Follows mute; louder than the ambience (full volume at the default 0.4 slider).
+  // Follows mute and the whole slider; louder than the ambience at every setting (square root:
+  // 0.63 at the default 0.4 slider, full at 100%). Was min(1, volume * 2.5): full from 40% up, so
+  // the top of the slider only moved the music.
   let fx = null, fxGain = null;
-  const fxLevel = () => (muted ? 0 : Math.min(1, volume * 2.5));
+  const fxLevel = () => (muted ? 0 : Math.sqrt(volume));
   // gain: this clip's own level (from the world's  sound: { src, volume } ), 1 = as recorded.
   function play(src, gain = 1) {
     ensureCtx();

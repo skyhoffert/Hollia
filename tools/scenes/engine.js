@@ -264,14 +264,29 @@
   // mustn't rock the shovel again).
   // Art with a-emerge (rises in when it appears) also fades back down when its flag goes
   // away (the cave's rock golem): the old copy stays a moment, unclickable, fading out.
+  // A hotspot's `if` without the "!flag" checks for the flags its own find sets.
+  function coverIf(h) {
+    const set = [].concat(h.action?.find?.set || []);
+    return [].concat(h.if ?? []).filter((c) => !set.some((f) => c === "!" + f));
+  }
   function drawHotspots(redraw) {
     if (!hotRoot) return;
     const prev = redraw ? { ...hotEls } : {};
     hotRoot.innerHTML = "";
     hotEls = {};
     // A step exit only shows where this position has that link.
-    const shown = (scene(current).hotspots || []).filter((h) => test(h.if) && (!h.action?.step || stepTo(h.action.step)));
-    shown.forEach(drawHotspot);
+    const all = scene(current).hotspots || [];
+    const shown = all.filter((h) => test(h.if) && (!h.action?.step || stepTo(h.action.step)));
+    // Taking a find removes the find, not the scenery: a hidden hotspot's cover (a pebble on a
+    // shard) still draws if the only thing hiding it is its own find.set flag (DM 2026-11-16).
+    for (const h of all) {
+      if (shown.includes(h)) drawHotspot(h);
+      else if (h.cover && test(coverIf(h))) {
+        const g = fragment(h.cover, hotRoot);
+        g.setAttribute("pointer-events", "none");
+        applyScale(h, g);
+      }
+    }
     // appearSound: played when a flag brings it in while you're here (once, however many at once).
     if (redraw) { playSound(shown.find((h) => h.appearSound && !prev[h.id])?.appearSound); updateFight(); }
     for (const [id, g] of Object.entries(prev)) {
@@ -311,6 +326,8 @@
     // anim: in step with a layer that has the same one (something inside the spyglass lens).
     if (h.art) { const node = fragment(h.art, g); if (h.anim) animInStep(node, h.anim); }
     shapeEl(h.shape, g, "hit ind-" + (h.indicator || "outline"));
+    // cover: drawn over the art (a pebble half on a find) but not part of what you hover/click.
+    if (h.cover) fragment(h.cover, g).setAttribute("pointer-events", "none");
     applyScale(h, g);
 
     g.addEventListener("pointerdown", (e) => (lastPointer = e.pointerType));
@@ -488,8 +505,9 @@
   function roam(id, act, dialogue) {
     const req = ++roamReq;
     roamWaiting[req] = (r) => {
+      // poke.sound (it flies off), talk.sound, feed.sound: only once the server agrees.
+      if (!r.error) playSound(CFG.roamers?.[id]?.[act || "poke"]?.sound);
       if (act === "talk" && r.ok) { roamTalk = id; return openDialogue(dialogue); }
-      if (!r.error) playSound(CFG.roamers?.[id]?.[act]?.sound); // e.g. feed.sound
       narrate(r.error || r.say);
     };
     if (act !== "release") narrate("…");
