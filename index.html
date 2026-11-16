@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hollia</title>
+<style>
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #15121f; color: #e9e2d0;
+         font: 15px/1.5 system-ui, sans-serif; padding: 16px; }
+  .card { width: 100%; max-width: 360px; background: #221c33; border: 1px solid #3a3152; border-radius: 12px; padding: 24px; }
+  h1 { font: 500 28px Georgia, serif; margin: 0 0 4px; }
+  .sub { color: #b9ad95; margin: 0 0 20px; font-size: 14px; }
+  label { display: block; font-size: 13px; color: #b9ad95; margin: 12px 0 4px; }
+  input { width: 100%; font: 16px system-ui, sans-serif; background: #15121f; color: #e9e2d0; border: 1px solid #4a3f66;
+          border-radius: 8px; padding: 10px 12px; }
+  input:focus { outline: 2px solid #f6c27a; outline-offset: 1px; }
+  #key { text-transform: uppercase; letter-spacing: .06em; }
+  button { width: 100%; margin-top: 18px; font: 600 15px system-ui, sans-serif; background: #f6c27a; color: #2a1a10;
+           border: 0; border-radius: 8px; padding: 11px; cursor: pointer; }
+  button:disabled { opacity: .6; cursor: default; }
+  button.ghost { background: #2f2745; color: #e9e2d0; border: 1px solid #4a3f66; font-weight: 400; margin-top: 8px; text-align: left; }
+  button.ghost:hover { background: #3a3155; }
+  .note { margin: 12px 0 0; font-size: 14px; color: #b9ad95; }
+  #msg { min-height: 1.5em; margin: 12px 0 0; color: #ff9f9f; font-size: 14px; }
+  #msg.waiting { color: #f6c27a; }
+  #resume { margin-bottom: 18px; padding-bottom: 18px; border-bottom: 1px solid #3a3152; }
+  #resume p, #choose p { margin: 0; font-size: 14px; color: #b9ad95; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Hollia</h1>
+  <p class="sub">Enter the server and key your DM gave you.</p>
+
+  <div id="resume" hidden>
+    <p id="resumeText"></p>
+    <button class="ghost" id="resumeBtn" type="button">Continue</button>
+  </div>
+
+  <form id="form">
+    <label for="server">Server</label>
+    <input id="server" maxlength="200" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="e.g. 203.0.113.5:3000" required>
+    <label for="key">Your key</label>
+    <input id="key" maxlength="40" autocomplete="off" spellcheck="false" required>
+    <div id="guest" hidden>
+      <p class="note" id="guestText"></p>
+      <label for="name">What should we call you?</label>
+      <input id="name" maxlength="24" autocomplete="nickname">
+    </div>
+    <button id="go" type="submit">Enter</button>
+  </form>
+
+  <div id="choose" hidden>
+    <p id="chooseText"></p>
+    <div id="chooseList"></div>
+  </div>
+
+  <p id="msg" role="alert"></p>
+</div>
+<script src="client.js"></script>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const toolUrl = (tool) => `tools/${tool}/`;
+  const store = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } },
+                  set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
+
+  const q = new URLSearchParams(location.search);
+  if (q.get("msg")) $("msg").textContent = q.get("msg");
+  // Server address: from the link (?server=...), else what this browser used last. Locally (a page on
+  // localhost) it defaults to a backend on this machine. Never part of the site itself.
+  if (q.get("server")) Hollia.setServer(q.get("server"));
+  $("server").value = Hollia.server() || (/^(localhost|127\.0\.0\.1)$/.test(location.hostname) ? "localhost:3000" : "");
+  $("key").value = q.get("key") || store.get("hollia.key") || "";
+  $("name").value = store.get("hollia.guestName") || "";
+
+  const s = Hollia.session();
+  if (s) {
+    $("resume").hidden = false;
+    $("resumeText").textContent = `You're logged in as ${s.name} in “${s.activity}”.`;
+    $("resumeBtn").onclick = () => (location.href = toolUrl(s.tool));
+  }
+
+  // Changing the key resets any guest/choose step from a previous key.
+  $("key").oninput = $("server").oninput = () => { $("guest").hidden = true; $("choose").hidden = true; $("form").hidden = false; };
+
+  let retry = null;
+  async function attempt(opts = {}) {
+    clearTimeout(retry);
+    const key = $("key").value.trim(), server = $("server").value.trim();
+    Hollia.setServer(server);
+    $("go").disabled = true;
+    try {
+      const m = await Hollia.login(key, opts);
+      if (m.t === "dm-key") {
+        // DM key: go run the session. Not remembered as the player key.
+        store.set("hollia.dmKey", key);
+        location.href = "dm/";
+        return;
+      }
+      store.set("hollia.key", key);
+      if (m.t === "welcome") {
+        if (opts.name) store.set("hollia.guestName", opts.name);
+        location.href = toolUrl(m.activity.tool);
+      } else if (m.t === "need-name") {
+        $("guest").hidden = false;
+        $("guestText").textContent = `That's the guest key for “${m.activity}”.`;
+        $("name").focus();
+      } else if (m.t === "choose") {
+        $("form").hidden = true;
+        $("choose").hidden = false;
+        $("chooseText").textContent = `Welcome, ${m.you.name}. Where to?`;
+        $("chooseList").innerHTML = "";
+        m.activities.forEach((a) => {
+          const b = document.createElement("button");
+          b.className = "ghost";
+          b.textContent = a.name;
+          b.onclick = () => attempt({ activity: a.id });
+          $("chooseList").append(b);
+        });
+      }
+      $("msg").textContent = "";
+    } catch (err) {
+      $("msg").textContent = err.message || "Couldn't log in.";
+      // Nothing open (or the server restarting): keep trying quietly, so players
+      // are let in the moment the DM opens something.
+      if (err.code === "nothing-open" || err.code === "network" || err.code === "updating") {
+        $("msg").className = "waiting";
+        retry = setTimeout(() => { if ($("key").value.trim() === key && $("server").value.trim() === server) attempt(opts); }, 4000);
+      } else $("msg").className = "";
+    }
+    $("go").disabled = false;
+  }
+
+  // Sent here by the DM (activity closed, or everyone moved): go straight back in.
+  if (q.get("auto") && $("key").value && $("server").value) {
+    $("resume").hidden = true;
+    attempt({ activity: q.get("activity") || undefined, name: store.get("hollia.guestName") || undefined });
+  }
+
+  $("form").onsubmit = (e) => {
+    e.preventDefault();
+    const name = $("guest").hidden ? undefined : $("name").value.trim();
+    if (name === "") return $("name").focus();
+    attempt({ name });
+  };
+</script>
+</body>
+</html>

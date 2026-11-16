@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hollia DM</title>
+<style>
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: #15121f; color: #e9e2d0; font: 15px/1.5 system-ui, sans-serif; }
+  main { max-width: 1240px; margin: 0 auto; padding: 16px; }
+  /* Announce row: a narrow presets menu, the text box takes the rest. */
+  select[data-announce-preset] { width: 110px; flex: none; }
+  select.annwho { width: 100px; flex: none; }
+  .gamebox select.wording { width: 120px; flex: none; }
+  header.top { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+  h1 { font: 500 24px Georgia, serif; margin: 0; }
+  h2 { font: 500 19px Georgia, serif; margin: 0; }
+  .muted { color: #9a8f7a; font-size: 13px; }
+  #status::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #9a8f7a; margin-right: 6px; }
+  #status.online::before { background: #9be08f; }
+  #status.offline::before { background: #ff6b6b; }
+
+  .card { background: #221c33; border: 1px solid #3a3152; border-radius: 12px; padding: 16px; margin-bottom: 14px; }
+  .card.closed { opacity: .75; }
+  .head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .pill { font: 600 11px system-ui, sans-serif; letter-spacing: .05em; text-transform: uppercase; border-radius: 99px; padding: 2px 8px; }
+  .pill.open { background: #2d4a2a; color: #9be08f; }
+  .pill.closed { background: #3a2a2a; color: #ff9f9f; }
+  .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  .spacer { flex: 1; }
+
+  button { font: 14px system-ui, sans-serif; background: #2f2745; color: #e9e2d0; border: 1px solid #4a3f66;
+           border-radius: 8px; padding: 7px 12px; cursor: pointer; }
+  button:hover { background: #3a3155; }
+  button.primary { background: #f6c27a; color: #2a1a10; border-color: #f6c27a; font-weight: 600; }
+  button.danger { border-color: #8a3a3a; color: #ffb0b0; }
+  input[type=text], input[type=password], select { font: 14px system-ui, sans-serif; background: #15121f; color: #e9e2d0;
+           border: 1px solid #4a3f66; border-radius: 8px; padding: 7px 10px; }
+  input[type=text] { flex: 1; min-width: 180px; }
+
+  .toggle { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border: 1px solid #4a3f66; border-radius: 8px; cursor: pointer; user-select: none; }
+  .toggle.on { background: #1f3a52; border-color: #9fd0f0; color: #cfe8fa; }
+  .tgroup { display: inline-flex; align-items: center; gap: 3px; }
+  .chip-t { display: inline-block; min-width: 22px; text-align: center; padding: 4px; font-size: 12px; border: 1px solid #4a3f66; border-radius: 6px; cursor: pointer; user-select: none; color: #9a8f7a; }
+  .chip-t.on { background: #1f3a52; border-color: #9fd0f0; color: #cfe8fa; }
+  .rounds { margin-top: 14px; padding: 10px 12px; border: 1px solid #4a3f66; border-radius: 10px; background: #1c1729; }
+  .rounds h3 { margin: 0 0 6px; font-size: 15px; color: #f6c27a; }
+  .rounds textarea { flex: 1; min-width: 240px; font: 14px/1.4 Georgia, serif; background: #15121f; color: #e9e2d0; border: 1px solid #4a3f66; border-radius: 8px; padding: 6px 8px; }
+  .rounds input.secs { width: 64px; }
+  .rounds .clock { font-weight: 600; color: #cfe8fa; }
+  .rounds ul.answers { margin: 8px 0 0; padding-left: 18px; }
+  .rounds ol.rlog { list-style: none; margin: 10px 0 0; padding: 8px 0 0; border-top: 1px solid #3a3152; max-height: 220px; overflow-y: auto; font: 13px/1.5 Georgia, serif; }
+  .rounds .r-round { font: 600 11px system-ui, sans-serif; color: #9a8f7a; text-transform: uppercase; margin-top: 6px; }
+  .rounds .r-dm { color: #f6c27a; font-style: italic; }
+
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 14px; }
+  td { padding: 6px 4px; border-top: 1px solid #2f2745; vertical-align: middle; }
+  td.name { display: flex; align-items: center; gap: 8px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+  .tag { font-size: 11px; color: #9a8f7a; border: 1px solid #3a3152; border-radius: 4px; padding: 0 4px; }
+  tr.away { opacity: .5; }
+  tr.flagrow td { border-top: 0; padding-top: 0; }
+  .flag { display: inline-flex; align-items: center; gap: 2px; font: 12px ui-monospace, monospace; background: #2a2340;
+          border: 1px solid #4a3f66; border-radius: 99px; padding: 1px 2px 1px 8px; margin: 0 4px 4px 0; }
+  .flag button { border: 0; background: none; padding: 0 5px; color: #ff9f9f; font-size: 14px; line-height: 1; }
+  input.addflag { font-size: 12px; padding: 3px 8px; width: 140px; }
+
+  /* inventories */
+  tr.invrow td { border-top: 0; padding-top: 0; font-size: 13px; }
+  .inv { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+  .inv .lbl { color: #9a8f7a; font-size: 12px; margin-left: 6px; }
+  .inv .lbl:first-child { margin-left: 0; }
+  .chip { display: inline-flex; align-items: center; gap: 2px; background: #1f2a3a; border: 1px solid #3a4f6a; border-radius: 99px;
+          padding: 1px 2px 1px 8px; font-size: 12px; }
+  .chip.over { border-color: #8a3a3a; }
+  .chip button { border: 0; background: none; padding: 0 5px; color: #ff9f9f; font-size: 14px; line-height: 1; }
+  /* Shards and scrolls: attunement toggle (per unique item). */
+  .chip button.att { color: #5f6f85; font-size: 13px; padding: 0 3px; }
+  .chip button.att.on { color: #f6c27a; text-shadow: 0 0 4px rgba(246, 194, 122, .7); }
+  .chip.attuned { border-color: #8a6f3a; }
+  .inv input.coins { width: 64px; font-size: 12px; padding: 2px 6px; flex: none; min-width: 0; }
+  .inv select, .inv button.small { font-size: 12px; padding: 2px 6px; }
+  .coin { color: #f0c860; }
+  .chip.lost { background: #3a2a2a; border-color: #8a3a3a; }
+  .chip.lost button { color: #9be08f; }
+  /* A lost minigame waiting for the DM's call (gameBox). */
+  tr.gamerow td { border-top: 0; padding-top: 0; }
+  .gamebox { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 10px; border: 1px solid #f6c27a;
+             border-radius: 8px; background: #2e2416; font-size: 13px; }
+  .gamebox b { color: #f6c27a; }
+  .gamebox button, .gamebox select { font-size: 12px; padding: 3px 8px; }
+  .gamebox button:disabled { opacity: .35; cursor: not-allowed; }
+  .gamebox button.picked { background: #f6c27a; color: #2a1a10; border-color: #f6c27a; }
+  .gamebox .confirm { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; }
+  .gamebox .confirm input[type=text] { flex: 1 1 320px; }
+  .gamebox input[type=text] { font-size: 12px; padding: 3px 8px; min-width: 120px; flex: 0 1 160px; }
+  details.places { margin-top: 12px; }
+  details.places summary { cursor: pointer; color: #b9ad95; font-size: 14px; }
+  .place { padding: 6px 0; border-top: 1px solid #2f2745; font-size: 13px; }
+  .place b { font-weight: 600; margin-right: 6px; }
+
+  /* play log */
+  #logcard .row { margin-top: 0; }
+  #logList { list-style: none; margin: 10px 0 0; padding: 0; max-height: 460px; overflow-y: auto; font-size: 13px; }
+  #logList li { padding: 4px 2px; border-top: 1px solid #2f2745; }
+  #logList .ts { color: #6a5f80; font: 12px ui-monospace, monospace; margin-right: 6px; }
+  #logList .who { font-weight: 600; margin-right: 4px; }
+  #logList .ev-dm .who { color: #f6c27a; }
+  #logList .ev-inv { color: #cfe8fa; }
+  #logList .snap { margin: 4px 0 2px 20px; color: #b9ad95; }
+  #logList button.small { font-size: 11px; padding: 1px 7px; margin-left: 6px; }
+
+  #login { max-width: 360px; margin: 10vh auto; }
+  #login input { width: 100%; margin-top: 6px; }
+  #login button { width: 100%; margin-top: 14px; }
+  #err { color: #ff9f9f; font-size: 14px; min-height: 1.4em; margin-top: 10px; }
+  #toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: #3a2418; color: #f4ead2;
+           border: 1px solid #8a5a3a; border-radius: 8px; padding: 8px 14px; font-size: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <div id="login" class="card" hidden>
+    <h1>DM controls</h1>
+    <p class="muted">Log in with the DM key (<code>node scripts/admin.js player list</code>,
+      the entry marked [DM]).</p>
+    <form id="loginForm">
+      <input id="server" autocomplete="off" spellcheck="false" placeholder="Server (e.g. 203.0.113.5:3000)" required>
+      <input id="key" type="password" autocomplete="off" placeholder="DM key" required>
+      <button class="primary" type="submit">Enter</button>
+    </form>
+    <div id="err"></div>
+  </div>
+
+  <div id="app" hidden>
+    <header class="top">
+      <h1>DM controls</h1>
+      <span class="muted"><span id="status">Connecting…</span> · <a href="#" id="logout" style="color:#9a8f7a">log out</a></span>
+    </header>
+    <div id="acts"></div>
+    <!-- Custom items made on the spot (server/inventory.js addCustom; kept in data/custom-items.json). -->
+    <section class="card" id="makecard">
+      <div class="head"><h2>Make an item</h2><span class="muted">Something unique, made up on the spot. Shard / scroll: type the spell (always 1x1, can be attuned). Weapon: a sword in your color. Plain item: a tag with its first letter. Then give it to a player or put it in a stash (Give / Put here).</span></div>
+      <form class="row" id="makeForm">
+        <select id="mkKind" title="What kind of item">
+          <option value="custom">Plain item</option><option value="shard">Shard (lasting spell)</option><option value="scroll">Scroll (single-use spell)</option><option value="weapon">Weapon</option>
+        </select>
+        <input type="text" id="mkName" maxlength="40" placeholder="Name" required>
+        <select id="mkSize" title="Size in pack tiles (1x1 and 1x2 fit one hand; 2x2 and 1x3 take both)">
+          <option value="1x1">1x1</option><option value="1x2">1x2</option><option value="2x1">2x1</option><option value="2x2">2x2</option><option value="1x3">1x3</option>
+        </select>
+        <input type="color" id="mkColor" value="#c9a24a" title="Color (a tag, the spell's color, or the sword's guard)">
+        <input type="text" id="mkDesc" maxlength="200" placeholder="What players see when they select it (optional)" style="flex:1;min-width:220px">
+        <button class="primary" type="submit">Make it</button>
+      </form>
+    </section>
+    <!-- Every character back to base (server: dm reset-characters). -->
+    <section class="card">
+      <div class="head"><h2>Characters</h2><span class="muted">Reset all: everyone gets the starting kit back, both hands and feet, no afflictions or char.* flags, no attunements, and can find things again. Activities keep their own memory (use an activity's Reset for that).</span></div>
+      <div class="row"><button id="resetChars">Reset all characters</button></div>
+    </section>
+    <section class="card" id="logcard">
+      <div class="head"><h2>Play log</h2><span class="muted">Everything players do, newest first. Kept in data/log/ (see scripts/log.js).</span></div>
+      <div class="row">
+        <select id="logWho"><option value="">Everyone</option></select>
+        <label class="muted"><input type="checkbox" id="logClicks" checked> clicks and choices</label>
+        <label class="muted"><input type="checkbox" id="logConn"> connects</label>
+      </div>
+      <ul id="logList"></ul>
+    </section>
+  </div>
+  <div id="toast" hidden></div>
+</main>
+<script src="../client.js"></script>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const store = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } },
+                  set: (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} } };
+
+  let ws = null, key = store.get("hollia.dmKey"), state = null, delay = 1000, toastTimer = null;
+
+  function toast(text) {
+    $("toast").textContent = text;
+    $("toast").hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => ($("toast").hidden = true), 3500);
+  }
+  let mismatch = null; // protocol version problem (Hollia.versionProblem), shown instead of "Reconnecting…"
+  function setStatus(s) { $("status").className = s; $("status").textContent = { online: "Live", offline: mismatch ? "Version mismatch" : "Reconnecting…" }[s] || "Connecting…"; }
+
+  function connect() {
+    if (!key || !Hollia.wsUrl()) { $("server").value = Hollia.server(); $("login").hidden = false; $("app").hidden = true; return; }
+    setStatus("connecting");
+    ws = new WebSocket(Hollia.wsUrl()); // the server address typed on a login page (Hollia.server)
+    ws.onopen = () => ws.send(JSON.stringify({ t: "dm-login", key }));
+    ws.onmessage = (e) => {
+      const m = JSON.parse(e.data);
+      // Server on another protocol version (PROTOCOL.md): say so and hang up. The reconnect loop
+      // keeps trying, so a server that was behind gets picked up once it restarts; an old page needs a refresh.
+      if (m.t === "dm-welcome" && Hollia.versionProblem(m)) {
+        mismatch = Hollia.versionProblem(m); toast(mismatch); ws.close(); return;
+      }
+      if (m.t === "dm-welcome") { mismatch = null; delay = 1000; setStatus("online"); store.set("hollia.dmKey", key); $("login").hidden = true; $("app").hidden = false; }
+      else if (m.t === "dm-state") { state = m; if (m.now) clockSkew = m.now - Date.now(); render(); }
+      else if (m.t === "dm-made-item") { selectMade = m.id; $("makeForm").reset(); toast(`Made "${m.name}". It's picked in every Give / Put here menu.`); }
+      else if (m.t === "dm-log") { logEntries = m.entries; renderLog(); }
+      else if (m.t === "dm-log-entry") { logEntries.push(m.entry); if (logEntries.length > 3000) logEntries.splice(0, 1000); renderLog(); }
+      else if (m.t === "error") {
+        if (m.code === "bad-key" || m.code === "slow-down" || m.code === "not-dm") {
+          key = null; store.set("hollia.dmKey", null);
+          $("err").textContent = m.message;
+          $("login").hidden = false; $("app").hidden = true;
+          ws.onclose = null; ws.close();
+        } else toast(m.message);
+      }
+    };
+    ws.onclose = () => { setStatus("offline"); setTimeout(connect, delay); delay = Math.min(delay * 2, 8000); };
+  }
+  const send = (activity, action) => ws?.readyState === 1 && ws.send(JSON.stringify({ t: "dm", activity, ...action }));
+
+  /* ---------- render ---------- */
+  // While a move dropdown is focused (maybe open), live updates wait: redrawing would close it.
+  // It catches up when the dropdown loses focus.
+  let renderWaiting = false;
+  function render() {
+    if (document.activeElement?.matches?.("#acts select")) { renderWaiting = true; return; }
+    renderWaiting = false;
+    // Keep what the DM is typing across live re-renders.
+    const keep = {}, focused = document.activeElement?.dataset?.field;
+    let caret = null;
+    try { const ae = document.activeElement; if (focused && ae.selectionStart != null) caret = [ae.selectionStart, ae.selectionEnd]; } catch {}
+    // Coin boxes show the live value unless the DM is typing in one.
+    document.querySelectorAll("[data-field]").forEach((i) => { if (!i.classList.contains("coins") || i === document.activeElement) keep[i.dataset.field] = i.value; });
+
+    $("acts").innerHTML = state.activities.map((a) => {
+      const online = a.players.filter((p) => p.online);
+      const who = a.only ? "only " + a.only.map((id) => state.roster.find((r) => r.id === id)?.name || id).join(", ") : "all players";
+      // Move menus: one entry per room; sub-rooms (s.group: the spyglass views, each seed farm) are
+      // one entry ("The Seed Farms", picking it goes to the group's first) plus a second menu,
+      // shown only while the player is in that group, to pick which one.
+      const opt = (value, label, on) => `<option value="${esc(value)}"${on ? " selected" : ""}>${esc(label)}</option>`;
+      // One entry per room (a group: its first sub-room). cur: the player's entry, to select.
+      const roomOpts = (sel, cur) => {
+        const seen = new Set();
+        return (a.scenes || []).map((s) => {
+          if (!s.group) return opt(s.id, s.name, s.id === sel);
+          if (seen.has(s.group)) return "";
+          seen.add(s.group);
+          return opt(s.id, s.group, cur?.group === s.group);
+        }).join("");
+      };
+      const moveMenus = (p) => {
+        const sel = p.pos != null ? `${p.scene}@${p.pos}` : p.scene;
+        const list = a.scenes || [], cur = list.find((s) => s.id === sel);
+        const main = roomOpts(sel, cur);
+        const attrs = `data-move="${esc(p.id)}" data-act="${esc(a.id)}"`;
+        const sub = cur?.group ? `<select ${attrs}>${list.filter((s) => s.group === cur.group).map((s) => opt(s.id, s.label, s.id === sel)).join("")}</select>` : "";
+        return `<select ${attrs}>${main}</select> ${sub}`;
+      };
+      // World flags a Scene-row toggle controls (cave enemies, lock, ...) stay off the player flag rows.
+      const toggled = new Set((a.toggles || []).flatMap((t) => [].concat(t.flag || t.flags || [])));
+      const order = (p) => (p.online ? 0 : 1);
+      const rows = [...a.players].sort((x, y) => order(x) - order(y) || x.name.localeCompare(y.name)).map((p) => `
+        <tr class="${p.online ? "" : "away"}">
+          <td class="name"><span class="dot" style="background:${esc(p.color)}"></span>${esc(p.name)}
+            ${p.bot ? '<span class="tag">bot</span>' : p.guest ? '<span class="tag">guest</span>' : ""}
+            ${p.online ? "" : '<span class="tag">away</span>'}
+            ${Object.entries(p.gameLevels || {}).map(([g, n]) => `<span class="tag" title="Minigame wins so far (difficulty)">${esc(a.games?.[g] || g)} ×${n}</span>`).join("")}</td>
+          <td style="text-align:right">${a.scenes ? moveMenus(p) : ""}</td>
+        </tr>
+        ${p.game?.pending ? gameBox(a, p) : p.game?.shells ? shellsBox(a, p) : ""}
+        ${p.inv ? invRow(a, p) : ""}
+        <tr class="flagrow ${p.online ? "" : "away"}"><td colspan="2">
+          ${(p.flags || []).filter((f) => !toggled.has(f)).map((f) => `<span class="flag">${esc(f)}<button title="Forget" data-unflag="${esc(f)}" data-player="${esc(p.id)}" data-act="${esc(a.id)}">×</button></span>`).join("")}
+          <input type="text" class="addflag" maxlength="48" placeholder="add flag" data-field="flag-${esc(a.id)}-${esc(p.id)}" data-player="${esc(p.id)}" data-act="${esc(a.id)}">
+        </td></tr>`).join("");
+
+      return `
+      <section class="card ${a.open ? "" : "closed"}">
+        <div class="head">
+          <h2>${esc(a.name)}</h2>
+          <span class="pill ${a.open ? "open" : "closed"}">${a.open ? "Open" : "Closed"}</span>
+          <span class="muted">${esc(a.tool)}/${esc(a.content)} · ${online.length} online · ${esc(who)}${a.guestKey ? " · guest key " + esc(a.guestKey) : ""}</span>
+        </div>
+        ${a.error ? `<p style="color:#ff9f9f">Content error: ${esc(a.error)}</p>` : ""}
+        <div class="row">
+          ${a.open ? `<button class="danger" data-do="close" data-act="${esc(a.id)}">Close</button>`
+                   : `<button data-do="open" data-act="${esc(a.id)}">Open</button>`}
+          <button data-do="send-all" data-act="${esc(a.id)}" title="Open this and move every roster player here from other activities">Send everyone here</button>
+          <span class="spacer"></span>
+          <button class="danger" data-do="reset" data-act="${esc(a.id)}" title="Everyone back to the start, all memory flags cleared, freezes lifted">Reset to start</button>
+        </div>
+        <div class="row">
+          <span class="toggle ${a.controls.move ? "on" : ""}" data-freeze="move" data-act="${esc(a.id)}">${a.controls.move ? "❄ Movement frozen" : "Freeze movement"}</span>
+          <span class="toggle ${a.controls.interact ? "on" : ""}" data-freeze="interact" data-act="${esc(a.id)}">${a.controls.interact ? "❄ Interaction frozen" : "Freeze interaction"}</span>
+          <span class="toggle ${a.controls.pack ? "on" : ""}" data-freeze="pack" data-act="${esc(a.id)}">${a.controls.pack ? "🎒 Inventory hidden" : "Hide inventory"}</span>
+        </div>
+        ${a.scenes ? `
+        <div class="row">
+          <span class="muted">Move everyone to</span>
+          <select data-field="all-${esc(a.id)}">${roomOpts()}</select>
+          <button data-do="move-all" data-act="${esc(a.id)}">Move</button>
+        </div>` : ""}
+        ${(a.toggles || []).length ? `
+        <div class="row">
+          <span class="muted">Scene</span>
+          ${a.toggles.map((g) => toggleHtml(a, g)).join("")}
+        </div>` : ""}
+        ${coinsRow(a)}
+        ${a.scenes ? `
+        <div class="row">
+          <span class="muted">Announce</span>
+          ${Object.keys(a.announcements || {}).length ? `<select data-field="annwho-${esc(a.id)}" class="annwho" title="Who the preset is about ({player})"><option value="">Who…</option>${a.players.filter((p) => !p.bot).map((p) => `<option value="${esc(p.name)}">${esc(p.name)}</option>`).join("")}</select>
+          <select data-announce-preset="${esc(a.id)}"><option value="">Presets…</option>${Object.entries(a.announcements).map(([g, l]) =>
+            `<optgroup label="${esc(ANN_GROUPS[g] || g)}">${l.map((x, i) => `<option value="${esc(g)}|${i}">${esc(x)}</option>`).join("")}</optgroup>`).join("")}</select>` : ""}
+          <input type="text" maxlength="300" placeholder="A line for everyone in here (a banner on their screen). Enter sends." data-field="annall-${esc(a.id)}" data-announce-box="${esc(a.id)}">
+          <button data-announce="${esc(a.id)}">Send</button>
+        </div>` : ""}
+        ${(a.roundScenes || []).map((rs) => roundsBox(a, rs)).join("")}
+        ${a.players.length ? `<table>${rows}</table>` : `<p class="muted" style="margin:12px 0 0">Nobody has joined yet.</p>`}
+        ${(a.places || []).length ? placesBox(a) : ""}
+      </section>`;
+    }).join("") || `<p class="muted">No activities. Create one with <code>node scripts/admin.js create ...</code></p>`;
+
+    document.querySelectorAll("[data-field]").forEach((i) => { if (keep[i.dataset.field] != null) i.value = keep[i.dataset.field]; });
+    // Just made a custom item: pick it in every Give / Put here menu (once it's in the catalog).
+    if (selectMade && state.items?.[selectMade]) {
+      document.querySelectorAll('select[data-field^="give-"], select[data-field^="pgive-"]').forEach((s) => (s.value = selectMade));
+      selectMade = null;
+    }
+    if (focused) {
+      const f = document.querySelector(`[data-field="${CSS.escape(focused)}"]`);
+      f?.focus();
+      // Keep the cursor where it was (answers arriving mid-round redraw the page while you type).
+      if (f && caret && "setSelectionRange" in f) try { f.setSelectionRange(caret[0], caret[1]); } catch {}
+    }
+  }
+
+  /* ---------- inventories ---------- */
+  const itemName = (id) => state.items?.[id]?.name || id;
+  const itemOpts = () => Object.entries(state.items || {}).sort((x, y) => x[1].name.localeCompare(y[1].name))
+    .map(([id, d]) => `<option value="${esc(id)}">${esc(d.name)} (${d.w}x${d.h}${d.custom ? ", custom" : ""})</option>`).join("");
+  const chip = (e, attrs, cls = "", pre = "") => `<span class="chip ${cls}">${esc(itemName(e.item))}${pre}<button title="Remove" ${attrs}>×</button></span>`;
+  const isSpell = (item) => ["shard", "scroll"].includes(state.items?.[item]?.kind);
+
+  function invRow(a, p) {
+    const inv = p.inv, rm = (e) => `data-inv-remove="${esc(e.id)}" data-player="${esc(p.id)}" data-act="${esc(a.id)}"`;
+    // A player's item chip; shards and scrolls get the attune toggle (✦), per unique item.
+    const pchip = (e, cls = "") => {
+      if (!isSpell(e.item)) return chip(e, rm(e), cls);
+      const on = !!inv.attuned?.includes(e.id);
+      const tog = `<button class="att${on ? " on" : ""}" title="${on ? "Attuned: click to end attunement" : "Not attuned: click to attune"}"
+        data-inv-attune="${esc(e.id)}" data-on="${on ? "" : "1"}" data-player="${esc(p.id)}" data-act="${esc(a.id)}">✦</button>`;
+      return chip(e, rm(e), cls + (on ? " attuned" : ""), tog);
+    };
+    // Limbs still there, for "Lose…" (hands: inventory `lost`; feet: flags limb.lostLeftFoot/RightFoot).
+    const feetGone = footsGone(p);
+    const canLose = [...["left", "right"].filter((h) => !inv.lost?.includes(h)).map((h) => [h, h + " hand"]),
+                     ...["left", "right"].filter((f) => !feetGone.includes(f)).map((f) => [f + "Foot", f + " foot"])];
+    const hands = ["left", "right", "both"].filter((h) => inv.hands[h]).map((h) => `<span class="lbl">${h === "both" ? "both hands" : h}</span>${pchip(inv.hands[h])}`).join("");
+    return `<tr class="invrow ${p.online ? "" : "away"}"><td colspan="2"><div class="inv">
+      <span class="lbl coin">◉</span><input type="text" class="coins" value="${inv.coins}" title="Coins: type a number, press Enter"
+        data-field="coins-${esc(a.id)}-${esc(p.id)}" data-coins-player="${esc(p.id)}" data-act="${esc(a.id)}">
+      ${hands || '<span class="lbl">hands empty</span>'}
+      ${(inv.lost || []).map((h) => `<span class="chip lost">lost ${esc(h)} hand<button title="Give it back" data-inv-hand="${esc(h)}" data-player="${esc(p.id)}" data-act="${esc(a.id)}">↺</button></span>`).join("")}
+      ${feetGone.map((f) => `<span class="chip lost">lost ${f} foot<button title="Give it back" data-limb-back="${f}Foot" data-player="${esc(p.id)}" data-act="${esc(a.id)}">↺</button></span>`).join("")}
+      <span class="lbl">pack</span>${inv.bag.map((e) => pchip(e)).join("") || '<span class="muted">empty</span>'}
+      ${inv.overflow.length ? '<span class="lbl">doesn\'t fit</span>' + inv.overflow.map((e) => pchip(e, "over")).join("") : ""}
+      <span class="spacer"></span>
+      <select data-field="give-${esc(a.id)}-${esc(p.id)}">${itemOpts()}</select>
+      <button class="small" data-inv-give="${esc(p.id)}" data-act="${esc(a.id)}">Give</button>
+      <button class="small" data-inv-kit="${esc(p.id)}" data-act="${esc(a.id)}" title="Replace everything with the starting kit">Kit</button>
+      ${canLose.length ? `<select data-limb-lose="${esc(p.id)}" data-act="${esc(a.id)}" title="Take a hand or foot (outside a minigame)"><option value="">Lose…</option>${canLose.map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select>` : ""}
+    </div></td></tr>`;
+  }
+
+  /* A player lost a minigame (the shore gull) and waits ("…") for the DM's call: let them off,
+     an affliction (a preset from the world's afflictions, or typed: flag affliction.<name>), a lost
+     hand (that hand's things go to the pack, or the crew crate) or a lost left/right foot (flag
+     limb.lostLeftFoot / limb.lostRightFoot). */
+  // Which feet a player has lost ("left", "right"), from their flags.
+  const footsGone = (p) => ["left", "right"].filter((f) => (p.flags || []).includes(f === "left" ? "limb.lostLeftFoot" : "limb.lostRightFoot"));
+  // Two steps: pick a choice (gamePick), then confirm it with the announcement to everyone, which
+  // starts as the game's announceSay for that choice ({player} {name} {hand} {foot}); edit it, or blank it
+  // for none.
+  const gamePick = {}; // "act|player" -> { choice, hand? (the side, for a hand or foot), label, fill: { player, hand, foot, name } }
+  const ANN_GROUPS = { hand: "Lost a hand", foot: "Lost a foot", affliction: "Affliction", damage: "Took damage" };
+  // Fill an announcement's blanks; ones we can't fill become ‹markers›, and the first is selected
+  // in the box so the DM can type over it.
+  function fillAnn(box, line, v) {
+    const mark = { player: "‹player›", hand: "‹left/right›", foot: "‹left/right›", name: "‹affliction›" };
+    box.value = String(line).replace(/\{(\w+)\}/g, (_, k) => v[k] || mark[k] || `‹${k}›`);
+    box.focus();
+    const i = box.value.indexOf("‹");
+    if (i >= 0) box.setSelectionRange(i, box.value.indexOf("›", i) + 1);
+  }
+  const choiceLabel = (c, side) => ({ off: "Let off", affliction: "Give affliction", hand: `Lost ${side} hand`, foot: `Lost ${side} foot` }[c]);
+  function gameBox(a, p) {
+    const g = p.game, act = esc(a.id), pid = esc(p.id), lost = p.inv?.lost || [], feet = footsGone(p);
+    const why = { early: "too early", late: "too slow" }[g.pending.result] || esc(g.pending.result);
+    const at = `data-player="${pid}" data-act="${act}"`;
+    const pk = gamePick[a.id + "|" + p.id];
+    const on = (c, h) => (pk && pk.choice === c && (pk.hand || null) === (h || null) ? " picked" : "");
+    return `<tr class="gamerow"><td colspan="2"><div class="gamebox">
+      <b>Lost the ${esc(a.games?.[g.game] || g.game)}</b><span class="muted">(${why}, level ${g.level}): waiting on you</span>
+      <span class="spacer"></span>
+      <button class="${on("off")}" data-game="off" ${at}>Let off</button>
+      <select data-field="aff-${act}-${pid}"><option value="">Affliction…</option>${(a.afflictions || []).map((x) => `<option>${esc(x)}</option>`).join("")}</select>
+      <input type="text" maxlength="80" placeholder="or type one" data-field="afftext-${act}-${pid}">
+      <button class="${on("affliction")}" data-game="affliction" ${at}>Give affliction</button>
+      ${["left", "right"].map((h) => `<button class="danger${on("hand", h)}" data-game="hand" data-hand="${h}" ${at} ${lost.includes(h) ? "disabled" : ""}>Lost ${h} hand</button>`).join("")}
+      ${["left", "right"].map((f) => `<button class="danger${on("foot", f)}" data-game="foot" data-hand="${f}" ${at} ${feet.includes(f) ? "disabled" : ""}>Lost ${f} foot</button>`).join("")}
+      ${pk ? `<div class="confirm"><span class="muted">Announce to everyone:</span>
+        ${(a.announcements?.[pk.choice] || []).length ? `<select class="wording" data-game-wording ${at} title="Other wordings (the world's announcements)"><option value="">Other wording…</option>${a.announcements[pk.choice].map((x, i) => `<option value="${i}">${esc(x)}</option>`).join("")}</select>` : ""}
+        <input type="text" maxlength="300" placeholder="(blank: no announcement)" data-field="ann-${act}-${pid}">
+        <button class="primary" data-game-go ${at}>Confirm: ${esc(pk.label)}</button>
+        <button data-game-cancel ${at}>Cancel</button></div>` : ""}
+    </div></td></tr>`;
+  }
+
+  /* The hustler's shell game (kind "shells"): where the player is, and once they've picked, the
+     DM marks it right (pot grows; last round pays out, plus the prize if it's still his) or wrong
+     (pot lost). The DM steers it: the shuffle on the player's screen is just for show. */
+  function shellsBox(a, p) {
+    const S = p.game.shells, at = `data-player="${esc(p.id)}" data-act="${esc(a.id)}"`;
+    const what = { pick: "watching the shuffle / picking", wait: `picked shell ${(S.pick ?? 0) + 1}: waiting on you`, won: "won the round: going on or taking the pot" }[S.stage] || esc(S.stage);
+    return `<tr class="gamerow"><td colspan="2"><div class="gamebox">
+      <b>${esc(a.games?.[S.game] || S.game)}</b><span class="muted">round ${S.round}, pot ${S.pot}: ${what}</span>
+      <span class="spacer"></span>
+      ${S.stage === "wait" ? `<button class="primary" data-shells="1" ${at}>Right</button><button class="danger" data-shells="0" ${at}>Wrong</button>` : ""}
+      <button data-shells-end="${S.round * (a.shellsAnte?.[S.game] ?? 1)}" data-name="${esc(p.name)}" ${at} title="Safety valve: call the game off and give back the coins they put in">End game (refund)</button>
+    </div></td></tr>`;
+  }
+
+  /* Minigame coins: how many coins each game has paid out to players (p.gameCoins, from the server;
+     a reset clears it), with who got them. Games that take coins in (the shell game) also show
+     what they took and the net. For deciding when an NPC has given enough and should leave. */
+  function coinsRow(a) {
+    const ids = Object.keys(a.games || {});
+    if (!ids.length) return "";
+    const chips = ids.map((g) => {
+      let paid = 0, took = 0;
+      const who = [];
+      for (const p of a.players) {
+        const t = p.gameCoins?.[g];
+        if (!t) continue;
+        paid += t.paid || 0; took += t.in || 0;
+        if (t.paid) who.push(`${esc(p.name)} ${t.paid}`);
+      }
+      const net = took ? ` <span class="muted">(took in ${took}, net ${paid - took})</span>` : "";
+      return `<span class="tag" title="Coins this game has paid out to players since the last reset">${esc(a.games[g])}: <b>${paid}</b>${net}${who.length ? ` <span class="muted">· ${who.join(", ")}</span>` : ""}</span>`;
+    }).join(" ");
+    return `<div class="row"><span class="muted">Minigame coins</span>${chips}</div>`;
+  }
+
+  /* Scene toggles (the world's dmToggles): world flags on/off for everyone. A group (the rats):
+     one button brings them all in / takes them all out, a numbered chip per flag does one. */
+  function toggleHtml(a, g) {
+    const wf = a.worldFlags || [], act = esc(a.id);
+    if (!g.flags) {
+      const on = wf.includes(g.flag);
+      return `<span class="toggle ${on ? "on" : ""}" data-wflag="${esc(g.flag)}" data-act="${act}" title="${esc(g.flag)}">${on ? "✦ " : ""}${esc(g.label)}</span>`;
+    }
+    const n = g.flags.filter((f) => wf.includes(f)).length;
+    return `<span class="tgroup"><span class="toggle ${n ? "on" : ""}" data-wgroup="${esc(g.flags.join(" "))}" data-act="${act}"
+              title="${n ? "Take them all out" : "Bring them all in"}">${n ? "✦ " : ""}${esc(g.label)} ${n}/${g.flags.length}</span>${g.flags.map((f, i) =>
+              `<span class="chip-t ${wf.includes(f) ? "on" : ""}" data-wflag="${esc(f)}" data-act="${act}" title="${esc(f)}">${i + 1}</span>`).join("")}</span>`;
+  }
+
+  /* Rounds panel for a scene with rounds (the cave): who's in it, start/end a timed round,
+     everyone's answers as they come in, the result box (everyone in the scene sees it), the log. */
+  function roundsBox(a, rs) {
+    const r = a.rounds?.[rs.id] || { n: 0, log: [] }, act = esc(a.id), sc = esc(rs.id);
+    const inside = a.players.filter((p) => p.scene === rs.id && !p.bot);
+    const answers = a.answers?.[rs.id] || {};
+    const cast = r.cast || [];
+    const logHtml = r.log.slice(-14).map((e) => e.k === "round" ? `<li class="r-round">Round ${e.n}</li>`
+      : e.k === "act" ? `<li><b>${esc(e.name)}</b>: ${esc(e.text)}</li>`
+      : e.k === "idle" ? `<li class="muted"><b>${esc(e.name)}</b> did nothing.</li>`
+      : `<li class="r-dm">${esc(e.text)}</li>`).join("");
+    return `<div class="rounds">
+      <h3>Rounds: ${esc(rs.name)}</h3>
+      <div class="muted">In there now (${inside.length}): ${inside.map((p) => `<span style="color:${esc(p.color || "#e9e2d0")}">${esc(p.name)}${p.online ? "" : " (away)"}</span>`).join(", ") || "nobody"}</div>
+      <div class="row">${r.endsAt
+        ? `<b>Round ${r.n}</b> <span class="clock" data-clock="${r.endsAt}"></span>
+           <span class="muted">${(r.answered || []).length}/${cast.length} answered</span>
+           <button data-round="end" data-scene="${sc}" data-act="${act}">End round now</button>`
+        : `<button class="primary" data-round="start" data-scene="${sc}" data-act="${act}" ${inside.length ? "" : "disabled"}>Start round ${r.n + 1}</button>
+           <input type="number" class="secs" min="5" max="600" value="30" data-field="secs-${act}-${sc}"> <span class="muted">seconds</span>`}</div>
+      ${r.endsAt ? `<ul class="answers">${cast.map((c) => `<li><b>${esc(c.name)}</b>: ${answers[c.id] ? esc(answers[c.id].text) : '<span class="muted">…</span>'}</li>`).join("")}</ul>` : ""}
+      <div class="row">
+        <textarea rows="2" placeholder="What happens (everyone in there sees this). Ctrl+Enter sends." data-field="rsay-${act}-${sc}" data-rsay="${sc}" data-act="${act}"></textarea>
+        ${rs.hit ? `<label class="muted" title="Plays the hit sound for everyone in there as the message shows"><input type="checkbox" data-hitbox="${act}/${sc}" ${hitOn[a.id + "/" + rs.id] ? "checked" : ""}> Hit sound</label>` : ""}
+        <button data-round="say" data-scene="${sc}" data-act="${act}">Send</button>
+      </div>
+      ${logHtml ? `<ol class="rlog">${logHtml}</ol>` : ""}
+      ${r.log.length || r.n || r.endsAt ? `<div class="row"><span class="spacer"></span><button class="danger small" data-round="clear" data-scene="${sc}" data-act="${act}"
+        title="Stops any round, wipes the log and typed actions, and starts back at round 1">Clear for next group</button></div>` : ""}
+    </div>`;
+  }
+  // Round countdowns tick on their own (dm-state only comes on changes).
+  let clockSkew = 0;
+  setInterval(() => document.querySelectorAll("[data-clock]").forEach((e) => {
+    e.textContent = Math.max(0, Math.ceil((+e.dataset.clock - (Date.now() + clockSkew)) / 1000)) + "s left";
+  }), 250);
+
+  function placesBox(a) {
+    const used = a.places.filter((pl) => pl.items.length || pl.coins);
+    const rows = a.places.map((pl, i) => `<div class="place"><div class="inv"><b>${esc(pl.label)}</b>
+        <span class="lbl coin">◉</span><input type="text" class="coins" value="${pl.coins}" data-field="pcoins-${esc(a.id)}-${i}" data-coins-place="${esc(pl.key)}" data-act="${esc(a.id)}">
+        ${pl.items.map((e) => chip(e, `data-place-remove="${esc(e.id)}" data-place="${esc(pl.key)}" data-act="${esc(a.id)}"`)).join("") || '<span class="muted">nothing</span>'}
+        <span class="spacer"></span>
+        <select data-field="pgive-${esc(a.id)}-${i}">${itemOpts()}</select>
+        <button class="small" data-place-give="${esc(pl.key)}" data-idx="${i}" data-act="${esc(a.id)}">Put here</button>
+        ${pl.items.length || pl.coins ? `<button class="small danger" data-place-empty="${esc(pl.key)}" data-label="${esc(pl.label)}" data-act="${esc(a.id)}" title="Take out every item and coin">Empty</button>` : ""}
+      </div></div>`).join("");
+    const key = "places-" + a.id;
+    return `<details class="places" data-open-key="${esc(key)}" ${openPlaces.has(key) ? "open" : ""}>
+      <summary>Stashes (${used.length ? used.map((pl) => esc(pl.label)).join(", ") : "all empty"})</summary>${rows}</details>`;
+  }
+  const openPlaces = new Set();
+  document.addEventListener("toggle", (e) => {
+    const k = e.target.dataset?.openKey;
+    if (k) e.target.open ? openPlaces.add(k) : openPlaces.delete(k);
+  }, true);
+
+  /* ---------- play log ---------- */
+  let logEntries = [];
+  const sceneName = (act, id) => state?.activities.find((a) => a.id === act)?.scenes?.find((s) => s.id === id)?.name || id;
+  const time = (ts) => new Date(ts).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  function describe(e) {
+    switch (e.ev) {
+      case "join": return e.guest ? "joined as a guest" : "joined";
+      case "connect": return `connected (${esc(sceneName(e.activity, e.scene))})`;
+      case "disconnect": return "went away";
+      case "leave": return "left";
+      case "move": return `went from ${esc(sceneName(e.activity, e.from))} to ${esc(sceneName(e.activity, e.to))}`;
+      case "flags": return "memory " + [...[].concat(e.set || []).map((f) => "+" + f), ...[].concat(e.unset || []).map((f) => "−" + f)].map(esc).join(" ");
+      case "click": return `looked at ${esc(e.label || e.hotspot)} (${esc(sceneName(e.activity, e.scene))})`;
+      case "choice": return `chose “${esc(e.text)}” (${esc(e.dialogue)})`;
+      case "chance": return e.hit ? `<b style="color:#9be08f">caught it!</b> (${esc(sceneName(e.activity, e.scene))}, ${Math.round((e.odds || 0) * 100)}% chance)`
+                                  : `looked, missed (${esc(sceneName(e.activity, e.scene))})`;
+      // A roamer (the farms' winged creature): sent flying, or given the seed.
+      case "roam": return e.act === "feed" ? `<b style="color:#9be08f">fed the ${esc(e.roamer)}</b> (farm ${esc(e.at)})`
+                        : e.act === "release" ? `let the ${esc(e.roamer)} go without the seed; it flew home (farm ${esc(e.at)})`
+                        : `sent the ${esc(e.roamer)} flying (farm ${esc(e.from)} → ${esc(e.to)})`;
+      case "announce": return `<b style="color:#f6c27a">announced</b> “${esc(e.text)}”`;
+      // Minigames (the shore gull): a try, how it went, the DM's call on a loss.
+      case "game": return e.op === "pick" ? `${esc(e.game)} game: picked shell ${e.shell + 1} (round ${e.round}, pot ${e.pot}): waiting on the DM`
+                        : e.op === "right" ? `<b style="color:#9be08f">${esc(e.game)} game: right</b> (round ${e.round}, pot now ${e.pot})`
+                        : e.op === "wrong" ? `${esc(e.game)} game: wrong, lost the pot of ${e.pot} (round ${e.round})`
+                        : e.op === "next" ? `${esc(e.game)} game: goes on to round ${e.round} (pot ${e.pot})`
+                        : e.op === "take" ? `${esc(e.game)} game: takes the pot of ${e.pot}`
+                        : e.op === "prize" ? `<b style="color:#9be08f">${esc(e.game)} game: won the ${esc(state.items?.[e.item]?.name || e.item)}</b>`
+                        : e.op === "start" && e.level == null ? `started the ${esc(e.game)} game`
+                        : e.op === "start" ? `started the ${esc(e.game)} game (level ${e.level || 0})`
+                        : e.op === "done" ? (e.result === "win" ? `<b style="color:#9be08f">won the ${esc(e.game)} game</b>` : `lost the ${esc(e.game)} game (${e.result === "early" ? "too early" : "too slow"}): waiting on the DM`)
+                        : `${esc(e.game)} game, DM's call: ${e.choice === "off" ? "let off" : e.choice === "hand" ? `lost ${esc(e.hand)} hand` : e.choice === "foot" ? `lost ${esc(e.foot)} foot` : `affliction (${esc(e.flag)})`}`;
+      case "inv": {
+        if (e.all) return esc(e.what);
+        if (e.what === "traded") return `traded ${esc(itemName(e.gave))} for ${(e.got || []).map(itemName).map(esc).join(", ")}`;
+        const bits = [esc(e.what)];
+        if (e.item) bits.push(esc(itemName(e.item)));
+        if (e.items) bits.push(e.items.map(itemName).map(esc).join(", "));
+        if (e.coins) bits.push(`${e.coins} coins`);
+        if (e.from && e.to) bits.push(`(${esc(e.from)} → ${esc(e.to)})`);
+        else if (e.place) bits.push(`(${esc(e.place)})`);
+        if (e.price) bits.push(`for ${e.price} coins`);
+        return bits.join(" ");
+      }
+      case "dm": {
+        const { ts, ev, by, activity, do: d, before, ...rest } = e; // before: reset-characters' old inventories (too big to show)
+        return `${esc(d)} ${esc(JSON.stringify(rest) === "{}" ? "" : JSON.stringify(rest))}`;
+      }
+      default: return esc(e.ev);
+    }
+  }
+  const snapText = (inv) => !inv ? "" : [`◉ ${inv.coins}`,
+    ...["left", "right", "both"].filter((h) => inv.hands?.[h]).map((h) => `${h}: ${itemName(inv.hands[h].item)}`),
+    `pack: ${(inv.bag || []).map((e) => itemName(e.item)).join(", ") || "empty"}`,
+    ...(inv.overflow?.length ? [`doesn't fit: ${inv.overflow.map((e) => itemName(e.item)).join(", ")}`] : [])].join(" · ");
+  function renderLog() {
+    const who = $("logWho").value, clicks = $("logClicks").checked, conn = $("logConn").checked;
+    const names = [...new Map(logEntries.filter((e) => e.player).map((e) => [e.player, e.name || e.player])).entries()];
+    const opts = '<option value="">Everyone</option><option value="@dm">DM actions</option>' +
+      names.map(([id, n]) => `<option value="${esc(id)}">${esc(n)}</option>`).join("");
+    if ($("logWho").dataset.opts !== opts) { $("logWho").innerHTML = opts; $("logWho").dataset.opts = opts; $("logWho").value = who; }
+    const shown = logEntries.filter((e) =>
+      (who === "@dm" ? e.ev === "dm" || e.by : !who || e.player === who) &&
+      (clicks || (e.ev !== "click" && e.ev !== "choice")) &&
+      (conn || !["connect", "disconnect"].includes(e.ev))).slice(-300).reverse();
+    $("logList").innerHTML = shown.map((e) => {
+      const i = logEntries.indexOf(e);
+      const actor = e.by ? `${esc(e.by)}${e.name ? " → " + esc(e.name) : ""}` : esc(e.name || "");
+      const canRestore = e.inv && e.player && state?.activities.some((a) => a.id === e.activity && a.players.some((p) => p.id === e.player && p.inv));
+      return `<li class="ev-${esc(e.ev)}"><span class="ts">${time(e.ts)}</span><span class="who">${actor}</span>${describe(e)}
+        ${e.inv ? `<button class="small" data-snap="${i}">inventory then</button>` : ""}
+        <div class="snap" data-snapbox="${i}" hidden>${esc(snapText(e.inv))}
+          ${canRestore ? `<button class="small danger" data-restore="${i}">Restore this</button>` : ""}</div></li>`;
+    }).join("") || '<li class="muted">Nothing yet.</li>';
+  }
+  ["logWho", "logClicks", "logConn"].forEach((id) => $(id).addEventListener("change", renderLog));
+  $("logList").addEventListener("click", (ev) => {
+    const b = ev.target.closest("button");
+    if (!b) return;
+    if (b.dataset.snap) { const box = document.querySelector(`[data-snapbox="${b.dataset.snap}"]`); box.hidden = !box.hidden; }
+    if (b.dataset.restore) {
+      const e = logEntries[+b.dataset.restore];
+      if (!confirm(`Put ${e.name}'s inventory back to how it was at ${time(e.ts)}? What they have now is replaced (the log keeps it).`)) return;
+      send(e.activity, { do: "inv", action: { player: e.player, restore: e.inv, from: e.ts } });
+    }
+  });
+
+  /* ---------- actions ---------- */
+  const actName = (id) => state.activities.find((a) => a.id === id)?.name || id;
+  $("acts").addEventListener("click", (e) => {
+    const u = e.target.closest("[data-unflag]");
+    if (u) return send(u.dataset.act, { do: "flags", player: u.dataset.player, unset: [u.dataset.unflag] });
+    // The shell game: mark the pick right or wrong.
+    const se = e.target.closest("[data-shells-end]");
+    if (se) {
+      if (!confirm(`Call off ${se.dataset.name}'s shell game? They get back the ${se.dataset.shellsEnd} coin(s) they put in; any pot they haven't taken is lost.`)) return;
+      return send(se.dataset.act, { do: "shells", player: se.dataset.player, end: true });
+    }
+    const sb = e.target.closest("[data-shells]");
+    if (sb) return send(sb.dataset.act, { do: "shells", player: sb.dataset.player, right: sb.dataset.shells === "1" });
+    // A lost minigame: the DM's call (gameBox). Step 1: pick, which fills in the announcement.
+    const gb = e.target.closest("[data-game], [data-game-go], [data-game-cancel]");
+    if (gb) {
+      const d = gb.dataset, act = d.act, k = act + "|" + d.player;
+      const a = state.activities.find((x) => x.id === act), p = a?.players.find((x) => x.id === d.player);
+      const fld = (n) => document.querySelector(`[data-field="${n}-${CSS.escape(act)}-${CSS.escape(d.player)}"]`);
+      const affName = () => fld("afftext")?.value.trim() || fld("aff")?.value.trim();
+      if ("gameCancel" in d) { delete gamePick[k]; return render(); }
+      if ("gameGo" in d) {
+        const pk = gamePick[k];
+        if (!pk) return;
+        const msg = { do: "game", player: d.player, choice: pk.choice, announce: fld("ann")?.value.trim() || "" };
+        if (pk.choice === "affliction") { msg.name = affName(); if (!msg.name) return toast("Pick or type an affliction first."); }
+        if (pk.choice === "hand") msg.hand = pk.hand;
+        if (pk.choice === "foot") msg.foot = pk.hand;
+        delete gamePick[k];
+        return send(act, msg);
+      }
+      if (d.game === "affliction" && !affName()) return toast("Pick or type an affliction first.");
+      const fill = { player: p?.name, hand: d.hand, foot: d.hand, name: affName() };
+      gamePick[k] = { choice: d.game, hand: d.hand, label: choiceLabel(d.game, d.hand), fill };
+      // The game's own line first (announceSay), else the first of the world's presets for it.
+      const tpl = a?.gameAnnounce?.[p?.game?.game]?.[d.game] ?? a?.announcements?.[d.game]?.[0];
+      const line = [].concat(tpl || "")[0] || "";
+      render();
+      const box = fld("ann");
+      if (box) line ? fillAnn(box, line, fill) : ((box.value = ""), box.focus());
+      return;
+    }
+    // Free-text announcement to everyone in the activity.
+    const an = e.target.closest("[data-announce]");
+    if (an) return sendAnnounce(an.dataset.announce);
+    const lb = e.target.closest("[data-limb-back]");
+    if (lb) return send(lb.dataset.act, { do: "limb", player: lb.dataset.player, limb: lb.dataset.limbBack, back: true });
+    const iv = e.target.closest("[data-inv-remove], [data-inv-give], [data-inv-kit], [data-inv-attune], [data-inv-hand], [data-place-remove], [data-place-give], [data-place-empty]");
+    if (iv) {
+      const d = iv.dataset, act = d.act;
+      if (d.invHand) return send(act, { do: "inv", action: { player: d.player, restoreHand: d.invHand } });
+      if (d.invAttune) return send(act, { do: "inv", action: { player: d.player, attune: d.invAttune, on: !!d.on } });
+      if (d.invRemove) return send(act, { do: "inv", action: { player: d.player, remove: d.invRemove } });
+      if (d.invGive) return send(act, { do: "inv", action: { player: d.invGive, give: document.querySelector(`[data-field="give-${CSS.escape(act)}-${CSS.escape(d.invGive)}"]`).value } });
+      if (d.invKit) {
+        const p = state.activities.find((a) => a.id === act)?.players.find((x) => x.id === d.invKit);
+        if (!confirm(`Replace everything ${p?.name || "they"} carries with the starting kit?`)) return;
+        return send(act, { do: "inv", action: { player: d.invKit, kit: true } });
+      }
+      if (d.placeRemove) return send(act, { do: "inv", action: { place: d.place, remove: d.placeRemove } });
+      if (d.placeEmpty) {
+        if (!confirm(`Empty ${d.label}? Every item and coin in it is gone.`)) return;
+        return send(act, { do: "inv", action: { place: d.placeEmpty, empty: true } });
+      }
+      if (d.placeGive) return send(act, { do: "inv", action: { place: d.placeGive, give: document.querySelector(`[data-field="pgive-${CSS.escape(act)}-${d.idx}"]`).value } });
+    }
+    // Scene toggles (the world's dmToggles): switch a world flag on/off for everyone.
+    const w = e.target.closest("[data-wflag]");
+    if (w) {
+      const a = state.activities.find((x) => x.id === w.dataset.act), f = w.dataset.wflag;
+      return send(w.dataset.act, (a.worldFlags || []).includes(f) ? { do: "flags", unset: [f] } : { do: "flags", set: [f] });
+    }
+    // A group: any of them in -> take them all out; none in -> bring them all in.
+    const wg = e.target.closest("[data-wgroup]");
+    if (wg) {
+      const a = state.activities.find((x) => x.id === wg.dataset.act), fl = wg.dataset.wgroup.split(" ");
+      const on = fl.filter((f) => (a.worldFlags || []).includes(f));
+      return send(wg.dataset.act, on.length ? { do: "flags", unset: on } : { do: "flags", set: fl });
+    }
+    // Rounds panel.
+    const rb = e.target.closest("[data-round]");
+    if (rb) {
+      const act = rb.dataset.act, scene = rb.dataset.scene, op = rb.dataset.round;
+      if (op === "start") return send(act, { do: "round", scene, op, seconds: +document.querySelector(`[data-field="secs-${CSS.escape(act)}-${CSS.escape(scene)}"]`)?.value || 30 });
+      if (op === "say") return sayRound(act, scene);
+      if (op === "clear" && !confirm("Clear the rounds for the next group? Stops any round, wipes the fight log and typed actions for everyone, and starts back at round 1.")) return;
+      return send(act, { do: "round", scene, op });
+    }
+    const t = e.target.closest("[data-do], [data-freeze]");
+    if (!t) return;
+    const id = t.dataset.act, a = state.activities.find((x) => x.id === id);
+    if (t.dataset.freeze) return send(id, { do: "freeze", [t.dataset.freeze]: !a.controls[t.dataset.freeze] });
+    const field = (f) => document.querySelector(`[data-field="${f}-${CSS.escape(id)}"]`);
+    switch (t.dataset.do) {
+      case "open": return send(id, { do: "open" });
+      case "close":
+        if (a.players.some((p) => p.online) && !confirm(`Close ${actName(id)}? Everyone in it is sent back to the login page.`)) return;
+        return send(id, { do: "close" });
+      case "reset":
+        if (!confirm(`Reset ${actName(id)}? Everyone goes back to the start, all memory flags are cleared and freezes are lifted. This can't be undone.`)) return;
+        return send(id, { do: "reset" });
+      case "send-all":
+        if (!confirm(`Move every player into ${actName(id)}?`)) return;
+        return send(id, { do: "send-all" });
+      case "move-all": return send(id, { do: "tool", action: { move: "all", scene: field("all").value } });
+    }
+  });
+  $("acts").addEventListener("change", (e) => {
+    // A preset announcement: fills the Announce box ({player} from "Who…"), to tweak, then Enter or Send.
+    const pre = e.target.closest("select[data-announce-preset]");
+    if (pre) {
+      const act = pre.dataset.announcePreset, a = state.activities.find((x) => x.id === act);
+      const box = document.querySelector(`[data-field="annall-${CSS.escape(act)}"]`);
+      const [g, i] = pre.value.split("|"), line = a?.announcements?.[g]?.[+i];
+      const who = document.querySelector(`[data-field="annwho-${CSS.escape(act)}"]`)?.value;
+      pre.value = "";
+      if (box && line) fillAnn(box, line, { player: who });
+      return;
+    }
+    // Settling a lost game: another wording for the announcement (filled in like the first).
+    const wd = e.target.closest("select[data-game-wording]");
+    if (wd) {
+      const d = wd.dataset, pk = gamePick[d.act + "|" + d.player], a = state.activities.find((x) => x.id === d.act);
+      const line = pk && a?.announcements?.[pk.choice]?.[+wd.value];
+      const box = document.querySelector(`[data-field="ann-${CSS.escape(d.act)}-${CSS.escape(d.player)}"]`);
+      wd.value = "";
+      if (box && line) fillAnn(box, line, pk.fill);
+      return;
+    }
+    // Take a hand or foot outside a minigame (asks first; announce separately if wanted).
+    const lose = e.target.closest("select[data-limb-lose]");
+    if (lose) {
+      const d = lose.dataset, limb = lose.value;
+      lose.value = "";
+      const p = state.activities.find((a) => a.id === d.act)?.players.find((x) => x.id === d.limbLose);
+      if (limb && confirm(`${p?.name || "They"} loses the ${limb.endsWith("Foot") ? limb.replace("Foot", "") + " foot" : limb + " hand"}?`)) send(d.act, { do: "limb", player: d.limbLose, limb });
+      return;
+    }
+    const s = e.target.closest("select[data-move]");
+    if (s) { send(s.dataset.act, { do: "tool", action: { move: s.dataset.move, scene: s.value } }); s.blur(); }
+  });
+  $("acts").addEventListener("focusout", (e) => {
+    if (e.target.matches("select") && renderWaiting) setTimeout(render);
+  });
+
+  // Send the result text to everyone in that scene, then empty the box.
+  // Rounds panel "Hit sound" ticks ("act/scene" -> true), kept across redraws; cleared after each send.
+  const hitOn = {};
+  document.addEventListener("change", (e) => { const h = e.target.closest("[data-hitbox]"); if (h) hitOn[h.dataset.hitbox] = h.checked; });
+  function sayRound(act, scene) {
+    const box = document.querySelector(`[data-field="rsay-${CSS.escape(act)}-${CSS.escape(scene)}"]`);
+    if (!box?.value.trim()) return toast("Type what happens first.");
+    const key = act + "/" + scene, hit = !!hitOn[key];
+    send(act, { do: "round", scene, op: "say", text: box.value.trim(), hit });
+    box.value = "";
+    if (hit) { delete hitOn[key]; const cb = document.querySelector(`[data-hitbox="${CSS.escape(key)}"]`); if (cb) cb.checked = false; }
+  }
+
+  function sendAnnounce(act) {
+    const box = document.querySelector(`[data-field="annall-${CSS.escape(act)}"]`);
+    if (!box?.value.trim()) return toast("Type the announcement first.");
+    send(act, { do: "announce", text: box.value.trim() });
+    box.value = "";
+  }
+
+  // Type a flag name and press Enter to give it to that player.
+  $("acts").addEventListener("keydown", (e) => {
+    const ab = e.target.closest("input[data-announce-box]");
+    if (ab && e.key === "Enter") { e.preventDefault(); return sendAnnounce(ab.dataset.announceBox); }
+    const rs = e.target.closest("textarea[data-rsay]");
+    if (rs && e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); return sayRound(rs.dataset.act, rs.dataset.rsay); }
+    const c = e.target.closest("input.coins");
+    if (c && e.key === "Enter") {
+      const n = Math.floor(+c.value);
+      if (!(n >= 0)) return toast("Coins must be a number, 0 or more.");
+      const action = c.dataset.coinsPlayer ? { player: c.dataset.coinsPlayer, coins: n } : { place: c.dataset.coinsPlace, coins: n };
+      send(c.dataset.act, { do: "inv", action });
+      c.blur();
+      return;
+    }
+    const i = e.target.closest("input.addflag");
+    if (!i || e.key !== "Enter" || !i.value.trim()) return;
+    send(i.dataset.act, { do: "flags", player: i.dataset.player, set: [i.value.trim()] });
+    i.value = "";
+  });
+
+  $("resetChars").onclick = () => {
+    if (!confirm("Reset every character to base? Everyone gets the starting kit, lost hands and feet come back, afflictions, char.* flags and attunements are cleared. The play log keeps what they had.")) return;
+    ws?.readyState === 1 && ws.send(JSON.stringify({ t: "dm", do: "reset-characters" }));
+    toast("Every character is back to base.");
+  };
+
+  // Make a custom item (global: not tied to an activity).
+  let selectMade = null;
+  $("makeForm").onsubmit = (e) => {
+    e.preventDefault();
+    const name = $("mkName").value.trim();
+    if (!name) return toast("Give the item a name.");
+    const kind = $("mkKind").value, spell = kind === "shard" || kind === "scroll";
+    const [w, h] = spell ? [1, 1] : $("mkSize").value.split("x").map(Number);
+    ws?.readyState === 1 && ws.send(JSON.stringify({ t: "dm", do: "new-item", item: { kind, name, w, h, color: $("mkColor").value, desc: $("mkDesc").value.trim() } }));
+  };
+  // Shards and scrolls: the name box takes the spell, and they're always 1x1.
+  const mkKindChanged = () => {
+    const spell = ["shard", "scroll"].includes($("mkKind").value);
+    $("mkName").placeholder = spell ? "Spell (e.g. Fireball)" : "Name";
+    $("mkSize").disabled = spell;
+    if (spell) $("mkSize").value = "1x1";
+  };
+  $("mkKind").onchange = mkKindChanged;
+  $("makeForm").addEventListener("reset", () => setTimeout(mkKindChanged));
+
+  $("loginForm").onsubmit =(e) => { e.preventDefault(); Hollia.setServer($("server").value); key = $("key").value.trim(); $("err").textContent = ""; connect(); };
+  $("logout").onclick = (e) => { e.preventDefault(); store.set("hollia.dmKey", null); location.reload(); };
+
+  connect();
+</script>
+</body>
+</html>

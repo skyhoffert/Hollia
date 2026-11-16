@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hollia scene viewer</title>
+<style>
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; } /* otherwise display:flex rules win over hidden */
+  body { margin: 0; background: #15121f; color: #e9e2d0; font: 15px/1.5 system-ui, sans-serif; }
+  main { max-width: 920px; margin: 0 auto; padding: 16px; }
+  header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+  h1 { font: 500 22px Georgia, serif; margin: 0; }
+  h2 { font: 500 16px Georgia, serif; margin: 0 0 8px; }
+  .who-am-i { display: flex; align-items: center; gap: 10px; font-size: 13px; color: #b9ad95; }
+  .who-am-i button { padding: 4px 10px; font-size: 13px; }
+  #soundVol { width: 80px; accent-color: #d8b25a; }
+  #status::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+                    background: #9a8f7a; margin-right: 6px; vertical-align: 1px; }
+  #status.online::before { background: #9be08f; }
+  #status.offline::before { background: #ff6b6b; }
+  #status.offline { color: #ff9f9f; }
+
+  /* Lost the server: cover everything (main is also made inert) until it's back. */
+  #offline { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center;
+             background: rgba(10, 8, 18, .72); padding: 16px; }
+  #offline[hidden] { display: none; }
+  #offline .box { background: #f4ead2; color: #2a1a10; border-radius: 10px; padding: 18px 22px; max-width: 340px;
+                  text-align: center; box-shadow: 0 6px 24px rgba(0,0,0,.5); }
+  #offline p { margin: 0 0 6px; font: 17px/1.4 Georgia, serif; }
+  #offline small { display: block; color: #5a4a3a; margin-bottom: 12px; }
+
+  /* Paused on page load until clicked (engine.js): animations held, main inert. The click also
+     lets the browser start the sound. Sits under #offline. */
+  #pause { position: fixed; inset: 0; z-index: 15; display: flex; flex-direction: column; align-items: center;
+           justify-content: center; gap: 6px; width: 100%; border: 0; border-radius: 0; cursor: pointer;
+           background: rgba(10, 8, 18, .72); color: #f4ead2; font: 22px/1.4 Georgia, serif; }
+  #pause:hover { background: rgba(10, 8, 18, .66); }
+  #pause small { font: 13px system-ui, sans-serif; color: #b9ad95; }
+  body.paused main *, body.paused main *::before, body.paused main *::after { animation-play-state: paused !important; }
+
+  #stage { position: relative; }
+  #stage svg { display: block; width: 100%; border-radius: 10px; transition: opacity var(--fade, .4s); } /* --fade: engine.js FADE_MS */
+  #stage.fade svg { opacity: 0; }
+  /* Scene locked (conversation, inventory, shop or stash): a faint border and a small label
+     at the top, so players know why clicks do nothing. Purely visual. */
+  #stage::after { content: ""; position: absolute; inset: 0; border-radius: 10px; pointer-events: none;
+                  box-shadow: inset 0 0 0 2px rgba(246, 194, 122, .5), inset 0 0 24px rgba(246, 194, 122, .12);
+                  opacity: 0; transition: opacity .2s; }
+  #stage::before { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); z-index: 1;
+                   pointer-events: none; white-space: nowrap; padding: 3px 10px; border-radius: 999px;
+                   font: 12px system-ui, sans-serif; color: #f6c27a; background: rgba(20, 16, 30, .7);
+                   border: 1px solid rgba(246, 194, 122, .35); opacity: 0; transition: opacity .2s; content: ""; }
+  body:is(.talking, .trading, .packing) #stage::after,
+  body:is(.talking, .trading, .packing) #stage::before { opacity: 1; }
+  body.packing #stage::before { content: "Close the inventory to explore"; }
+  /* DM announcements (engine.js announce): a gold banner across the top of the scene, fades out. */
+  #announce { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); z-index: 3; width: max-content;
+              max-width: calc(100% - 48px); padding: 6px 14px; border-radius: 10px; pointer-events: none; text-align: center;
+              font: italic 13px/1.4 Georgia, serif; color: #2a1a10; background: #f6d48e; border: 1px solid #fff0c8;
+              box-shadow: 0 4px 18px rgba(0,0,0,.45), 0 0 24px rgba(246, 194, 122, .35); animation: announceIn .5s ease-out; }
+  #announce.out { opacity: 0; transition: opacity .6s; }
+  @keyframes announceIn { from { opacity: 0; transform: translate(-50%, -10px); } to { opacity: 1; transform: translate(-50%, 0); } }
+  /* A minigame (game.js): its own picture over the scene, the game panel below; nothing else works. */
+  #gameView { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 10px; cursor: pointer; touch-action: none; }
+  body.gaming .hot { pointer-events: none; }
+  body.gaming #narr, body.gaming #pack, body.gaming #packBtn, body.gaming #dlg { display: none !important; }
+  #game { background: #221c33; border: 1px solid #f6c27a; border-radius: 10px; padding: 12px 16px; margin: 10px 0 14px; }
+  #gameMsg { font: italic 16px/1.5 Georgia, serif; color: #d8ccb0; min-height: 1.5em; margin: 0 0 8px; }
+  #game .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  #gamePull { background: #f6c27a; color: #2a1a10; border-color: #f6c27a; font-weight: 600; padding: 10px 20px; }
+  #gamePull:disabled { opacity: .5; }
+  #game .hint { font-size: 12px; color: #9a8f7a; }
+  body:has(#gamePull[hidden]) #game .hint { display: none; }
+  body.trading #stage::before { content: "Press Done to explore"; }
+  body.talking #stage::before { content: "Finish the conversation to explore"; }
+
+  /* animation presets used by scenes.js */
+  #scene [class*="a-"], #gameView [class*="a-"] { transform-box: view-box; transform-origin: var(--ox, 0) var(--oy, 0); }
+  .a-drift { animation: drift var(--d, 6s) linear infinite; }
+  .a-bob { animation: bob var(--d, 4s) ease-in-out infinite; }
+  .a-sway { animation: sway var(--d, 1.5s) ease-in-out infinite; }
+  .a-flicker { animation: flicker var(--d, 1.3s) steps(3) infinite; }
+  .a-pulse { animation: pulse var(--d, 2s) ease-in-out infinite; }
+  .a-rev { animation-direction: reverse; }
+  /* Stretches up/down from --ox/--oy to --amt times its height and back, timed like bob
+     (the docks' mooring line following the bobbing ship). */
+  .a-stretch { animation: stretch var(--d, 4s) ease-in-out infinite; }
+  @keyframes stretch { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(var(--amt, .8)); } }
+  /* Slides by --dx/--dy px and back (water washing in and out on a shoreline). */
+  .a-tide { animation: tide var(--d, 8s) ease-in-out infinite; }
+  @keyframes tide { 0%, 100% { transform: translate(0, 0); }
+                    50% { transform: translate(calc(var(--dx, 0) * 1px), calc(var(--dy, -6) * 1px)); } }
+  /* Plays once when drawn: turns from --amt degrees (tilted) to upright, with a small overshoot. */
+  .a-settle { animation: settle var(--d, .9s) ease-out both; }
+  /* Plays once when drawn: rises up out of the dark (the cave's rock golem). When its hotspot
+     goes away, engine.js keeps the old copy a moment as .leaving: it fades out. */
+  .a-emerge { animation: emerge var(--d, 1.4s) ease-out both; }
+  @keyframes emerge { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }
+  .hot.leaving { animation: vanish 1.8s linear both; pointer-events: none; } /* linear: ease-in looked like a pop at the end */
+  @keyframes vanish { from { opacity: 1; } to { opacity: 0; } }
+  @keyframes settle { 0% { transform: rotate(calc(var(--amt, 14) * -1deg)); }
+                      65% { transform: rotate(calc(var(--amt, 14) * .15deg)); }
+                      100% { transform: rotate(0deg); } }
+  /* Plays once when drawn: rocks back and forth by --amt degrees, dying down (the silo shovel). */
+  .a-rock { animation: rock var(--d, 3s) ease-in-out both; }
+  @keyframes rock { 0%, 100% { transform: rotate(0deg); }
+                    10% { transform: rotate(calc(var(--amt, 6) * -1deg)); }
+                    25% { transform: rotate(calc(var(--amt, 6) * .8deg)); }
+                    40% { transform: rotate(calc(var(--amt, 6) * -.6deg)); }
+                    55% { transform: rotate(calc(var(--amt, 6) * .4deg)); }
+                    70% { transform: rotate(calc(var(--amt, 6) * -.25deg)); }
+                    85% { transform: rotate(calc(var(--amt, 6) * .1deg)); } }
+  @keyframes drift { to { transform: translateX(calc(var(--amt, 80) * -1px)); } }
+  @keyframes bob { 0%, 100% { transform: translateY(0) rotate(calc(var(--amt, 1.5) * -1deg)); }
+                   50% { transform: translateY(5px) rotate(calc(var(--amt, 1.5) * 1deg)); } }
+  @keyframes sway { 0%, 100% { transform: rotate(calc(var(--amt, 4) * -1deg)); }
+                    50% { transform: rotate(calc(var(--amt, 4) * 1deg)); } }
+  @keyframes flicker { 0% { opacity: 1; } 50% { opacity: .65; } 100% { opacity: .9; } }
+  @keyframes pulse { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
+
+  /* hotspots */
+  .hot { cursor: pointer; outline: none; }
+  .hit { fill: transparent; stroke: transparent; stroke-width: 2; transition: stroke .15s; }
+  /* No border on mouse hover (the hover text is enough); keyboard focus still shows one. */
+  .hot:focus-visible .ind-outline { stroke: rgba(255, 226, 160, .85); stroke-dasharray: 5 4; }
+  .ind-ring { stroke: rgba(255, 226, 160, .6); animation: pulse 2s ease-in-out infinite; }
+  .hot:hover .ind-ring, .hot:focus-visible .ind-ring { stroke: #ffe2a0; }
+
+  /* presence */
+  .presence { pointer-events: none; }
+  .pdot circle { stroke: #1a1424; stroke-width: 2; }
+  .pdot.me circle { stroke: #fff; stroke-width: 2.5; }
+  .pdot text { font-weight: 600; font-family: system-ui, sans-serif; fill: #1a1424; }
+  .pdot.remote circle { stroke: rgba(255,255,255,.85); stroke-width: 1; }
+  .badge circle { fill: #c43d4b; stroke: #fff; stroke-width: 1.5; }
+  .badge text { font: 600 11px system-ui, sans-serif; fill: #fff; }
+
+  /* width: max-content so it doesn't shrink-wrap against the stage's right edge (wrapping near-edge hotspots). */
+  #tip { position: absolute; z-index: 2; width: max-content; max-width: 260px; pointer-events: none;
+         background: #f4ead2; color: #2a1a10; padding: 8px 11px; border-radius: 8px;
+         font: 14px/1.4 Georgia, serif; box-shadow: 0 4px 14px rgba(0,0,0,.35); }
+  #tip b { display: block; font: 600 12px system-ui, sans-serif; color: #7a3a2a; margin-bottom: 2px; }
+  #tip .extra { font: 12px system-ui, sans-serif; color: #5a4a3a; margin-top: 4px; }
+
+  #narr { font: italic 16px/1.5 Georgia, serif; color: #d8ccb0; min-height: 1.5em; margin: 12px 0 4px; }
+  /* "Pick it up" / "Take a handful" button after looking at a find (find.ask): engine.js */
+  #narr .narr-act { font: 13px system-ui, sans-serif; font-style: normal; margin-left: 6px; padding: 2px 10px; vertical-align: 1px; }
+  #here { font-size: 14px; color: #b9ad95; margin: 0 0 12px; }
+
+  /* Rounds: the fight log and action box (rounds.js) */
+  #rounds { background: #1c1729; border: 1px solid #3a3152; border-radius: 10px; padding: 12px 16px; margin-bottom: 14px; }
+  #roundLog { list-style: none; margin: 0; padding: 0; max-height: 240px; overflow-y: auto; font: 15px/1.5 Georgia, serif; }
+  #roundLog li { margin: 2px 0; }
+  #roundLog .r-round { font: 600 12px system-ui, sans-serif; color: #9a8f7a; text-transform: uppercase; letter-spacing: 1px; margin-top: 10px; }
+  #roundLog .r-round:first-child { margin-top: 0; }
+  #roundLog .r-idle { color: #9a8f7a; font-style: italic; }
+  #roundLog .r-dm { color: #f6c27a; font-style: italic; }
+  #roundForm { margin-top: 10px; }
+  #roundForm label { display: block; font: 600 14px system-ui, sans-serif; color: #f6c27a; margin-bottom: 6px; }
+  #roundClock { color: #e9e2d0; margin-left: 6px; }
+  #roundText { width: 100%; box-sizing: border-box; font: 15px/1.4 Georgia, serif; background: #15121f; color: #e9e2d0;
+               border: 1px solid #4a3f66; border-radius: 8px; padding: 8px 10px; resize: vertical; }
+  #roundForm .row { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+  #roundNote, #roundWait { font: 13px system-ui, sans-serif; color: #9a8f7a; margin: 6px 0 0; }
+  #dlg { background: #221c33; border: 1px solid #3a3152; border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }
+  #dlg .who { font: 600 13px system-ui, sans-serif; color: #f6c27a; }
+  #dlg p { font: 16px/1.5 Georgia, serif; margin: 4px 0 10px; }
+  #dlg .choices { display: flex; flex-wrap: wrap; gap: 8px; }
+  button { font: 14px system-ui, sans-serif; background: #2f2745; color: #e9e2d0; border: 1px solid #4a3f66;
+           border-radius: 8px; padding: 8px 12px; cursor: pointer; }
+  button:hover { background: #3a3155; }
+
+  #roster ul { list-style: none; margin: 0; padding: 0; }
+  #roster li { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid #2a2340; font-size: 14px; }
+  #roster .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+  #roster .where { margin-left: auto; color: #9a8f7a; font-size: 13px; text-align: right; }
+  #roster li.away { opacity: .5; }
+
+  /* design mode (?design) */
+  #design { background: #1d2436; border: 1px dashed #4a5f85; border-radius: 10px; padding: 12px 16px; margin-bottom: 14px; }
+  #design .note { font-size: 13px; color: #9a8f7a; margin: 0 0 8px; }
+  #design .row { display: flex; align-items: center; gap: 10px; padding: 4px 0; font-size: 14px; }
+  #design .row span { flex: 0 0 170px; }
+  #design input[type=range] { flex: 1; min-width: 80px; }
+  #design output { width: 3em; text-align: right; font-variant-numeric: tabular-nums; }
+  #design .row button { padding: 3px 8px; font-size: 12px; }
+  #design > button { margin-top: 8px; }
+  #design pre { background: #15121f; border-radius: 6px; padding: 8px; font-size: 13px; user-select: all; white-space: pre-wrap; }
+
+  /* DM controls */
+  #frozen { font-size: 13px; color: #9fd0f0; margin: -2px 0 8px; }
+  #frozen::before { content: "❄ "; }
+  .no-move .exit { opacity: .35; cursor: not-allowed; }
+  #stage.asking .hot { cursor: progress; }
+  /* Mid scene change (engine.js transition): nothing clickable until the new scene has faded in. */
+  body.fading .hot, body.fading #narr, body.fading #pack, body.fading #packBtn { pointer-events: none; }
+  /* In a conversation: nothing else to click, no narration, no inventory until it ends. */
+  body.talking .hot { pointer-events: none; }
+  body.talking #narr, body.talking #pack, body.talking #packBtn { display: none; }
+  /* The DM hid inventory (engine.js applyControls). */
+  body.no-pack #pack, body.no-pack #packBtn { display: none !important; }
+  /* A shop or stash is open (pack.js): same lock, inventory stays, "Done" is the way out. */
+  body.trading .hot { pointer-events: none; }
+  body.trading #narr, body.trading #packBtn { display: none; }
+  /* Inventory open (pack.js): the scene is locked until it's closed. */
+  body.packing .hot { pointer-events: none; }
+  .no-interact .hot:not(.exit) { cursor: not-allowed; }
+  .no-interact .hot:not(.exit) .hit { stroke: transparent !important; }
+  /* pack (pack.js) */
+  #belowStage { display: flex; gap: 8px; margin-top: 10px; }
+  #belowStage:has(> [hidden]:only-child) { display: none; }
+  #packBtn.on { background: #f6c27a; color: #2a1a10; border-color: #f6c27a; }
+  #pack { background: #221c33; border: 1px solid #3a3152; border-radius: 10px; padding: 12px 16px; margin-bottom: 14px; }
+  #pack h2 { margin: 0; }
+  #pack h3 { font: 600 13px system-ui, sans-serif; color: #f6c27a; margin: 0 0 6px; display: flex; align-items: center; gap: 8px; }
+  #pack .note { font-size: 12px; color: #9a8f7a; margin: 0; }
+  .pack-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+  .pack-head .coins { color: #f0c860; font-size: 14px; }
+  #packMsg { flex: 1; font-size: 13px; color: #b9ad95; min-width: 120px; }
+  #packMsg.bad { color: #ff9f9f; }
+  #pack button.done { margin-left: auto; background: #f6c27a; color: #2a1a10; border-color: #f6c27a; font-weight: 600; }
+  #pack .shop-line { font: italic 15px/1.5 Georgia, serif; color: #d8ccb0; margin: 0 0 6px; }
+  #pack button.x { margin-left: auto; padding: 0 9px; font-size: 18px; line-height: 1.4; }
+  .pack-main { display: flex; gap: 18px; flex-wrap: wrap; align-items: flex-start; }
+  .pack-main .col { display: flex; flex-direction: column; align-items: center; }
+  .pack-main .detail { flex: 1; min-width: 180px; align-items: stretch; }
+  .cap { font-size: 11px; color: #9a8f7a; text-transform: uppercase; letter-spacing: .06em; margin-top: 4px; }
+  .hands { display: flex; gap: 6px; }
+  .hand { border: 2px dashed #4a3f66; border-radius: 8px; display: flex; align-items: center; justify-content: center; padding: 2px; }
+  .hand .empty { font-size: 11px; color: #6a5f80; text-align: center; }
+  .hand.lost { border-style: solid; border-color: #2a2340; background: #15121f; opacity: .7; } /* inv.lost (pack.js) */
+  .bag { position: relative; background: #15121f; border: 2px solid #4a3f66; border-radius: 6px; box-sizing: content-box; }
+  .bag .cell { position: absolute; box-sizing: border-box; border: 1px solid #2a2340; }
+  .bag .preview { position: absolute; box-sizing: border-box; border: 2px solid #9be08f; background: rgba(155,224,143,.12); border-radius: 6px; pointer-events: none; }
+  .bag .preview.no { border-color: #ff6b6b; background: rgba(255,107,107,.12); }
+  #pack .item { padding: 0; display: flex; align-items: center; justify-content: center; background: #2a2340; border: 1px solid #5a4f76;
+                border-radius: 6px; cursor: grab; touch-action: none; box-sizing: border-box; }
+  #pack .item:hover { background: #342b4f; }
+  #pack .item.sel { border: 2px solid #f6c27a; }
+  #pack .item.dragging { opacity: .3; }
+  #pack .item svg { pointer-events: none; }
+  /* Spell items this player is attuned to: a small gold mark in the corner. */
+  #pack .item { position: relative; }
+  #pack .item .att { position: absolute; top: 1px; right: 3px; font-size: 11px; line-height: 1; color: #f6c27a;
+                     text-shadow: 0 0 4px rgba(246, 194, 122, .8); pointer-events: none; }
+  #pack .attune { margin: 4px 0 0; font-size: 13px; }
+  #pack .attune.on { color: #f6c27a; }
+  #pack .attune.off { color: #9a8fb5; }
+  #pack.busy .item { cursor: wait; opacity: .7; }
+  .pack-ghost { position: fixed; z-index: 10; pointer-events: none; display: flex; align-items: center; justify-content: center;
+                background: rgba(52,43,79,.85); border: 2px solid #f6c27a; border-radius: 6px; }
+  .pack-ghost.pending { animation: pulse 1s ease-in-out infinite; }
+  .hand.over, .area.over { border-color: #9be08f !important; background: rgba(155,224,143,.08); }
+  .detail .sel-art { float: left; margin: 0 10px 4px 0; }
+  .detail h3 { color: #e9e2d0 !important; font-size: 15px !important; }
+  .detail .desc { font: 14px/1.4 Georgia, serif; color: #d8ccb0; margin: 6px 0; clear: left; }
+  .detail .acts { display: flex; flex-wrap: wrap; gap: 6px; }
+  .detail .acts button { padding: 5px 10px; font-size: 13px; }
+  #pack .area { border: 1px dashed #3a3152; border-radius: 8px; padding: 8px 10px; margin-top: 12px; }
+  #pack .pile { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-end; min-height: 30px; }
+  .coinrow { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #f0c860; margin-bottom: 6px; }
+  .coinrow .spacer { flex: 1; }
+  .coinrow input { width: 70px; font: 13px system-ui, sans-serif; background: #15121f; color: #e9e2d0; border: 1px solid #4a3f66; border-radius: 6px; padding: 4px 6px; }
+  .coinrow button { padding: 4px 9px; font-size: 13px; }
+  .shop ul { list-style: none; margin: 0 0 6px; padding: 0; }
+  .shop li { display: flex; align-items: center; gap: 8px; padding: 3px 0; border-top: 1px solid #2a2340; font-size: 14px; }
+  .shop .nm { flex: 1; }
+  .shop .price { color: #f0c860; }
+  .shop li button { padding: 4px 10px; font-size: 13px; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  #roster .tag { font-size: 11px; color: #9a8f7a; border: 1px solid #3a3152; border-radius: 4px; padding: 0 4px; }
+</style>
+</head>
+<body class="paused">
+<main>
+  <header>
+    <h1 id="sceneName">Loading…</h1>
+    <div class="who-am-i">
+      <button id="sound" type="button" aria-pressed="true">Sound: on</button>
+      <input id="soundVol" type="range" min="0" max="100" aria-label="Sound volume">
+      <span id="status">Connecting…</span>
+      <button id="leave" type="button">Leave</button>
+    </div>
+  </header>
+  <div id="frozen" hidden></div>
+  <div id="stage">
+    <svg id="scene" role="img" aria-label="Current scene"></svg>
+    <svg id="gameView" viewBox="0 0 680 400" role="img" aria-label="Minigame" hidden></svg>
+    <div id="tip" hidden></div>
+    <div id="announce" role="status" aria-live="polite" hidden></div>
+  </div>
+  <section id="game" hidden>
+    <p id="gameMsg"></p>
+    <div class="row"><button id="gamePull" type="button">Pull back!</button><button id="gameDone" type="button" hidden>Done</button>
+      <span class="hint">Space or click the picture works too.</span></div>
+  </section>
+  <div id="belowStage"><button id="packBtn" type="button" hidden>Inventory</button></div>
+  <p id="narr"></p>
+  <section id="rounds" hidden>
+    <ol id="roundLog"></ol>
+    <form id="roundForm" hidden>
+      <label for="roundText"><span id="roundLabel">What do you do?</span> <span id="roundClock"></span></label>
+      <textarea id="roundText" rows="2" maxlength="300" autocomplete="off"></textarea>
+      <div class="row"><button type="submit">Send</button> <span id="roundNote"></span></div>
+    </form>
+    <p id="roundWait" hidden>Waiting for the DM…</p>
+  </section>
+  <p id="here"></p>
+  <section id="dlg" hidden></section>
+  <section id="pack" hidden></section>
+  <section id="design" hidden></section>
+  <section id="roster">
+    <h2>Party</h2>
+    <ul id="rosterList"></ul>
+  </section>
+</main>
+<button id="pause" type="button">Click to begin<small id="pauseNote">Sound will play</small></button>
+<div id="offline" hidden role="alertdialog" aria-labelledby="offlineMsg">
+  <div class="box">
+    <p id="offlineMsg">Lost connection to the server.</p>
+    <small>Trying to reconnect…</small>
+    <button id="offlineLeave" type="button">Leave</button>
+  </div>
+</div>
+<script src="../../client.js"></script>
+<script src="ambient.js"></script>
+<script src="pack.js"></script>
+<script src="rounds.js"></script>
+<script src="game.js"></script>
+<script src="engine.js"></script>
+</body>
+</html>
