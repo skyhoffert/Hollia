@@ -1,6 +1,9 @@
 /* Ambient sound for the scenes page: one looping background track, crossfaded on scene change.
    Scenes say  ambient: "sounds/x.ogg"  (path from the site root); null = silence; left out (undefined)
-   = keep what's playing. Web Audio for gapless loops. preload() fetches every sound on page load
+   = keep what's playing. A list,  ambient: ["sounds/a.ogg", "sounds/b.ogg"] , layers the tracks: they
+   loop together, the new ones started at the same moment once all have loaded (the voyage's sea plus
+   fight music). A track playing before and after a change just keeps going (the sea carries on from
+   Rough Water into The Hafgufa while the fight music fades in). Web Audio for gapless loops. preload() fetches every sound on page load
    (engine.js, behind "Click to begin"); anything not in yet loads the first time it's needed.
    Browsers keep the AudioContext suspended until the first click/key; it resumes then
    (the page's "Click to begin" overlay, #pause, makes sure that click comes first).
@@ -14,8 +17,8 @@
 
   let ctx = null, master = null;
   const buffers = new Map(); // src -> Promise<AudioBuffer|null>
-  let cur = null;            // { node, gain } now playing
-  let want;                  // src wanted (null = silence, undefined = nothing set yet)
+  let cur = new Map();       // src -> { node, gain } now playing (one per layered track)
+  let want;                  // tracks wanted, joined by "|" ("" = silence, undefined = nothing set yet)
   let seq = 0;               // newer set() calls win over slow loads
 
   function ensureCtx() {
@@ -58,34 +61,45 @@
     return buffers.get(src);
   }
 
-  // Switch to src over fadeMs (old fades out while new fades in).
+  // Switch to src (a track, a list of tracks to layer, or null) over fadeMs (old fades out while
+  // new fades in).
   function set(src, fadeMs = 1000) {
-    if (src === undefined || src === want) return;
-    want = src;
+    if (src === undefined) return;
+    const list = [].concat(src || []).filter(Boolean);
+    const key = list.join("|");
+    if (key === want) return;
+    want = key;
     const tok = ++seq;
     ensureCtx();
     const f = fadeMs / 1000;
-    if (cur) {
-      const { node, gain } = cur, t = ctx.currentTime;
+    // Tracks not wanted any more fade out; ones still wanted keep playing (brought back to full
+    // if they were fading out).
+    for (const [s, { node, gain }] of cur) {
+      const t = ctx.currentTime;
       gain.gain.cancelScheduledValues(t);
       gain.gain.setValueAtTime(gain.gain.value, t);
+      if (list.includes(s)) { gain.gain.linearRampToValueAtTime(1, t + f); continue; }
       gain.gain.linearRampToValueAtTime(0, t + f);
       node.stop(t + f + 0.05);
-      cur = null;
+      cur.delete(s);
     }
-    if (!src) return;
-    load(src).then((buf) => {
-      if (!buf || tok !== seq) return;
+    const fresh = list.filter((s) => !cur.has(s));
+    if (!fresh.length) return;
+    Promise.all(fresh.map(load)).then((bufs) => {
+      if (tok !== seq) return;
       const t = ctx.currentTime;
-      const node = ctx.createBufferSource();
-      node.buffer = buf;
-      node.loop = true;
-      const gain = ctx.createGain();
-      gain.gain.setValueAtTime(0, t);
-      gain.gain.linearRampToValueAtTime(1, t + f);
-      node.connect(gain).connect(master);
-      node.start(t);
-      cur = { node, gain };
+      for (const [i, buf] of bufs.entries()) {
+        if (!buf || cur.has(fresh[i])) continue;
+        const node = ctx.createBufferSource();
+        node.buffer = buf;
+        node.loop = true;
+        const gain = ctx.createGain();
+        gain.gain.setValueAtTime(0, t);
+        gain.gain.linearRampToValueAtTime(1, t + f);
+        node.connect(gain).connect(master);
+        node.start(t);
+        cur.set(fresh[i], { node, gain });
+      }
     });
   }
 

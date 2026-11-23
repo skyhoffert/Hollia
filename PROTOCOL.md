@@ -84,7 +84,7 @@ welcome {
   items: <catalog>,           scenes tool only: the item catalog
   inv: <inv>,                 scenes tool only: your inventory
   place: <place>,             scenes tool only: stashes and shop stock where you are
-  world: <world>              scenes tool only: the whole world (see "The world")
+  world: <world>              scenes and minigames tools: the whole world (see "The world")
 }
 ```
 
@@ -104,6 +104,7 @@ welcome {
   - `rounds: { <sceneId>: { n, endsAt, cast: [{ id, name }], answered: [playerId], log: [entry] } }`:
     timed rounds (the cave fight). `endsAt` = server ms or null. Log entries:
     `{ k: "round", n } | { k: "act", name, text } | { k: "idle", name } | { k: "dm", text }`
+  - `mg: <mg>`: minigames tool only, the rounds (below)
 - **`<catalog>`**: `{ <itemId>: { name, w, h, kind, custom?, spell?, price, desc, art, hold } }`.
   `art` = SVG markup in a `w*32` by `h*32` box. `hold`: which hands it takes.
 - **`<inv>`**: `{ coins, hands: { left?, right? } | { both }, bag: [<item>], overflow: [<item>], attuned: [id], lost: ["left"|"right"], flags: [string] }`.
@@ -118,6 +119,16 @@ welcome {
   - `{ shells: <shells> }`: a shell game in progress
 - **`<try>`**: `{ id, game, flavor, level, plan: { speed, moves: [{ at, len }], tell, strike, end } }`.
   Times in ms from the start. `flavor` picks the page's drawing (`games/<flavor>.js`).
+- **`<mg>`** (minigames tool): `{ game, stage, round, board, boards, retry, n }`
+  - `game`: the game id the DM picked; `stage`: `"idle"` (waiting) | `"intro"` (that game's intro) |
+    `"play"` (a round is on) | `"board"` (the board `board` names is up)
+  - `round`: `{ id, game, kind: "practice"|"real", seed, startsAt, endsAt, settle, cast: [{ id, name, color }], scores: { <playerId>: { score, done?, dropped? } } }` or null.
+    `startsAt` = end of the countdown, `endsAt` = time's up (server ms); `settle` = extra seconds of
+    play after that before the score counts. `cast` = everyone online at Start; anyone else waits for
+    the next round. `score` is the latest progress until `done`.
+  - `boards`: `{ "<game>:<kind>": { game, kind, seed, at, scores: [{ id, name, color, score, dropped?, retried? }] } }`,
+    the latest round of each game and kind (a DM reset clears them)
+  - `retry`: `{ player, name, game, kind, seed, startsAt, endsAt, settle }` or null: one player replaying a saved board alone
 - **`<shells>`**: `{ id, game, round, rounds, pot, stage: "pick"|"wait"|"won"|"over", pick: 0-2|null, canGoOn }`.
 
 ## The world
@@ -134,6 +145,10 @@ it; its full authoring format is `worlds/FORMAT.md` in the server repo. The page
 | `trades`, `heals` | engine | NPC trades and limb heals offered in dialogue |
 | `roamers` | engine | roaming creatures (route, timings, lines) |
 | `games` | game | minigames (kind, flavor, art, lines) |
+
+A **minigames** world (`meta.tool: "minigames"`) is different: `{ meta: { name, countdown, ambient, sounds }, tiers: [{ min, name, say }], games: [{ id, name, limit, settle?, intro: { title, text, how }, practice, real, sounds }] }`.
+The page loads `tools/minigames/games/<id>.js` for each game (the stand-in if there's none) and
+gives it that round's `practice` or `real` settings. Format: `worlds/FORMAT.md` "Minigames worlds".
 
 Everything in `world` reaches every player's browser: anything secret in it can be read with the
 browser's dev tools.
@@ -155,6 +170,9 @@ All need a session (`join` / `resume` first).
 | `hold { release: true }` | none | let go of everything you hold |
 | `game { op, req, ... }` | `game-result { req, ... }` | minigames, see below |
 | `answer { text }` | `shared` to everyone | your action for the running round (max 300 chars) |
+| `mg { op: "progress", round, score }` | none | minigames: your score so far (0-100), every couple of seconds while playing; it counts if you drop |
+| `mg { op: "done", round, score, req? }` | `mg-result { req, ok?, error? }`, `shared` to everyone | minigames: finished. `score: null` = this page lost its game (a refresh): the latest progress counts, marked dropped. The last one in ends the round (the board is saved) |
+| `mg { op: "done", retry: true, score, req? }` | same | minigames: your retry's score (replaces yours on that board) |
 | `did { kind: "click", hotspot, label }` / `did { kind: "choice", dialogue, node, text }` | none | for the play log only |
 
 ### inv ops
@@ -187,6 +205,9 @@ Any answer can be `{ req, error }` instead. The page judges the timing itself (i
 
 Pushed whenever something changes, besides the answers above.
 
+A minigames round ends when everyone in its cast is done (or dropped: their page closed), or
+`settle` + a couple of seconds after `endsAt`, whichever is first; then `shared` has `stage: "board"`.
+
 | message | what |
 |---|---|
 | `players { players: [<player>] }` | the full player list, on every change (visibility as in `welcome`) |
@@ -196,7 +217,7 @@ Pushed whenever something changes, besides the answers above.
 | `place { place }` | stashes / stock where you are changed (or you moved) |
 | `items { items: <catalog> }` | the DM made a new item: the whole catalog |
 | `shared { shared, now }` | activity-wide state changed |
-| `moved { scene, pos?, message? }` | you were moved (by the DM), or (no `req`) your move was refused |
+| `moved { scene, spot?, pos?, message? }` | you were moved (by the DM), or (no `req`) your move was refused. `spot`: where in the scene (a DM move to a station; same scene and position = just a new spot, no scene change) |
 | `chance { scene, hit, say? }` | the roll for this visit to a scene with `chance` |
 | `shells { shells, say, right? }` | the DM marked your shell pick, or called the game off |
 | `game-verdict { text, choice }` | the DM settled your lost minigame; you're free again |
@@ -223,7 +244,7 @@ next `dm-state` (sent at most every 100 ms after any change). Failures come back
 | `reset-characters` | | every character back to the starting kit (no `activity`) |
 | `open` / `close` | | open or close the activity |
 | `freeze` | `move?, interact?, pack?` (booleans) | freeze / unfreeze |
-| `send-all` | `scene?` | open it and move every roster player into it, at its start; `scene` (`id` or `id@pos`, as in the scenes `tool` move): there instead, and players already in it move there too |
+| `send-all` | `scene?` | open it and move every roster player into it, at its start; `scene` (`id`, `id@pos` or `id#spot`, as in the scenes `tool` move): there instead, and players already in it move there too |
 | `reset` | | the activity back to its start (inventories kept) |
 | `flags` | `player?, set?, unset?` | one player's flags; no `player` = `world.*` flags only |
 | `round` | `scene, op: start\|end\|say\|clear, seconds?, text?, hit?` | run timed rounds; `hit` plays the scene's hit sound |
@@ -231,14 +252,15 @@ next `dm-state` (sent at most every 100 ms after any change). Failures come back
 | `game` | `player, choice: off\|affliction\|hand\|foot, name?, hand?, foot?, announce?` | settle a lost minigame |
 | `shells` | `player, right` or `player, end: true` | mark a shell pick, or call the game off (coins back) |
 | `limb` | `player, limb: left\|right\|leftFoot\|rightFoot, back?` | take a hand/foot, or give it back |
-| `tool` | `action: { move: playerId\|"all", scene }` | scenes: move players (`scene` can be `"id@pos"`) |
+| `tool` | `action: { pick \| intro \| start \| end \| retry \| idle }` | minigames: `{ pick: game }` choose the game; `{ intro: game? }` show its intro; `{ start: "practice"\|"real", game? }` a round for everyone online (countdown `meta.countdown` s, then the game's `limit`); `{ end: true }` time's up now (pages still send scores); `{ retry: playerId, board: "<game>:<kind>" }` that player replays the board's seed alone; `{ idle: true }` back to the waiting screen |
+| `tool` | `action: { move: playerId\|"all", scene }` | scenes: move players (`scene` can be `"id@pos"`, or `"id#spot"` for a station: a scene with 2+ spots, listed per spot in `dm-state`'s `scenes`) |
 | `inv` | `action` | edit an inventory or stash: `{ player \| place, give \| remove \| coins \| kit \| attune \| restoreHand \| restore \| empty, ... }` |
 
 Server -> DM page:
 
 | message | what |
 |---|---|
-| `dm-state { now, roster, items, activities }` | everything, on every change. `roster: [{ id, name, dm, color }]`; each activity: `{ id, name, tool, content, open, only, guestKey, controls, worldFlags, rounds, answers, players, places, ... }`, players with `flags`, `game`, `gameLevels`, `gameCoins`, `inv`; scenes activities add `scenes`, `toggles`, `roundScenes`, `games`, `shellsAnte`, `gameAnnounce`, `afflictions`, `announcements` (or `error` if the world failed to load). |
+| `dm-state { now, roster, items, activities }` | everything, on every change. `roster: [{ id, name, dm, color }]`; each activity: `{ id, name, tool, content, open, only, guestKey, controls, worldFlags, rounds, answers, players, places, ... }`, players with `flags`, `game`, `gameLevels`, `gameCoins`, `inv`; scenes activities add `scenes`, `toggles`, `roundScenes`, `games`, `shellsAnte`, `gameAnnounce`, `afflictions`, `announcements`; minigames activities add `mgGames: [{ id, name, limit }]`, `mgTiers`, `mg` (the `<mg>` above) (or `error` if the world failed to load). |
 | `dm-log { entries }` | the last 500 play log entries, on login |
 | `dm-log-entry { entry }` | each new log entry, live. Entries: `{ ts, ev, activity?, player?, name?, ... }` |
 

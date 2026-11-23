@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hollia minigames</title>
+<!-- The minigames tool (server/tools/minigames.js): everyone plays the same game at once, the
+     DM runs the rounds from the DM page. Shared pieces: kit.js; scoreboard: board.js; each game:
+     games/<id>.js (a game without a file plays games/standin.js). Desktop only.
+     ?solo: play any game and round alone, without the DM (testing and tuning). It logs in only to
+     get the world, then hangs up: never in the DM's rounds, nothing sent. -->
+<style>
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: #15121f; color: #e9e2d0; font: 15px/1.5 system-ui, sans-serif; }
+  main { max-width: 1000px; margin: 0 auto; padding: 16px; }
+  header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+  h1 { font: 500 22px Georgia, serif; margin: 0; }
+  h2 { font: 500 26px Georgia, serif; margin: 0 0 6px; }
+  .who-am-i { display: flex; align-items: center; gap: 10px; font-size: 13px; color: #b9ad95; }
+  #vol { width: 80px; accent-color: #d8b25a; }
+  .who-am-i button { padding: 4px 10px; font-size: 13px; }
+  #status::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #9a8f7a; margin-right: 6px; vertical-align: 1px; }
+  #status.online::before { background: #9be08f; }
+  #status.offline::before { background: #ff6b6b; }
+  #status.offline { color: #ff9f9f; }
+  button, select, input { font: 14px system-ui, sans-serif; background: #2f2745; color: #e9e2d0; border: 1px solid #4a3f66; border-radius: 8px; padding: 6px 12px; }
+  button { cursor: pointer; }
+  button:hover { background: #3a3155; }
+  button.primary { background: #f6c27a; color: #2a1a10; border-color: #f6c27a; font-weight: 600; }
+  a { color: #9a8f7a; }
+
+  .card { background: #221c33; border: 1px solid #3a3152; border-radius: 12px; padding: 18px 20px; margin-bottom: 14px; }
+  .lead { font: italic 17px/1.5 Georgia, serif; color: #d8ccb0; margin: 6px 0 10px; }
+  .how { padding: 8px 12px; border-left: 3px solid #f6c27a; background: #1c1729; border-radius: 0 8px 8px 0; }
+  .how b { color: #f6c27a; }
+  .muted { color: #9a8f7a; font-size: 13px; }
+  #stage { position: relative; }
+  #canvas { display: block; width: 100%; aspect-ratio: 960 / 600; border-radius: 10px; background: #0c0a14; cursor: crosshair; }
+  #under { margin-top: 10px; }
+  .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+  #offline, #start { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(10, 8, 18, .72); padding: 16px; }
+  #offline { z-index: 20; }
+  #offline .box { background: #f4ead2; color: #2a1a10; border-radius: 10px; padding: 18px 22px; max-width: 340px; text-align: center; font: 17px/1.4 Georgia, serif; }
+  #start { z-index: 15; flex-direction: column; gap: 6px; width: 100%; border: 0; border-radius: 0; color: #f4ead2; font: 22px/1.4 Georgia, serif; cursor: pointer; }
+  #start small { font: 13px system-ui, sans-serif; color: #b9ad95; }
+  #phone { display: none; }
+  @media (max-width: 700px) { #phone { display: block; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1 id="title">Minigames</h1>
+    <div class="who-am-i">
+      <span id="status">Connecting…</span>
+      <span id="me"></span>
+      <button id="sound" type="button" aria-pressed="true">Sound: on</button>
+      <input id="vol" type="range" min="0" max="100" aria-label="Sound volume">
+      <a href="#" id="logout">log out</a>
+    </div>
+  </header>
+  <p id="phone" class="card muted">These games need a computer with a mouse and keyboard.</p>
+
+  <!-- Nothing running: waiting for the DM. -->
+  <section id="vWait" class="card" hidden>
+    <h2>Waiting for the DM</h2>
+    <p class="lead" id="waitText">The DM will start the next game soon.</p>
+  </section>
+
+  <!-- The DM's intro for the game about to be played. -->
+  <section id="vIntro" class="card" hidden>
+    <div class="muted" id="introGame"></div>
+    <h2 id="introTitle"></h2>
+    <p class="lead" id="introText"></p>
+    <div class="how"><b>How to play:</b> <span id="introHow"></span></div>
+    <p class="muted" id="introTime"></p>
+  </section>
+
+  <!-- Playing: the canvas. -->
+  <section id="vPlay" hidden>
+    <div id="stage"><canvas id="canvas" width="960" height="600"></canvas></div>
+    <div id="under" class="muted"></div>
+  </section>
+
+  <!-- A scoreboard: live while others finish, then the saved board. -->
+  <section id="vBoard" hidden>
+    <p class="lead" id="boardNote"></p>
+    <div id="board"></div>
+  </section>
+
+  <!-- ?solo: pick a game and round, play alone. -->
+  <section id="vSolo" class="card" hidden>
+    <h2>Solo practice</h2>
+    <p class="muted">Play any game alone, without the DM. Nothing is sent to the server or saved. Same seed = same layout.</p>
+    <div class="row">
+      <select id="soloGame"></select>
+      <select id="soloKind"><option value="practice">Practice</option><option value="real">For real</option></select>
+      <input id="soloSeed" placeholder="Seed (blank: random)" style="width:170px">
+      <button class="primary" id="soloGo">Play</button>
+    </div>
+    <p class="lead" id="soloResult"></p>
+  </section>
+</main>
+<button id="start">Click to join the crew<small>(this also turns on the sound)</small></button>
+<div id="offline" hidden><div class="box">Lost the connection. Reconnecting…</div></div>
+
+<script src="../../client.js"></script>
+<script src="kit.js"></script>
+<script src="board.js"></script>
+<script src="games/standin.js"></script>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const SOLO = new URLSearchParams(location.search).has("solo");
+  const store = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } },
+                  set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
+
+  let world = null, me = null, shared = {}, skew = 0, started = false, reqN = 0;
+  const clock = () => Date.now() + skew; // the server's clock
+  // The game running in this page: { key: "round:<id>" | "retry:<startsAt>" | "solo", runner, done }.
+  let active = null;
+  const sent = new Set(); // rounds this page already finished or gave up on
+
+  /* ---------- sound ---------- */
+  // Sound on/off and volume: the same saved setting as the scene pages (hollia.ambient), so
+  // muting one mutes the other.
+  let muted = false, vol = 0.4;
+  try { const s = JSON.parse(store.get("hollia.ambient")) || {}; muted = !!s.muted; if (typeof s.volume === "number") vol = s.volume; } catch {}
+  function applySound() {
+    $("sound").textContent = muted ? "Sound: off" : "Sound: on";
+    $("sound").setAttribute("aria-pressed", String(!muted));
+    $("vol").value = Math.round(vol * 100);
+    if (amb) amb.volume = muted ? 0 : vol * 0.5;
+    store.set("hollia.ambient", JSON.stringify({ muted, volume: vol }));
+  }
+  $("sound").onclick = () => { muted = !muted; applySound(); };
+  $("vol").oninput = () => { vol = $("vol").value / 100; if (muted && vol > 0) muted = false; applySound(); };
+  const clips = {};
+  function play(src) {
+    if (!src || !started || muted) return;
+    const s = typeof src === "string" ? { src } : src;
+    const a = (clips[s.src] ||= new Audio(Hollia.root + s.src)).cloneNode();
+    a.volume = vol * (s.volume ?? 1);
+    a.play().catch(() => {});
+  }
+  // A shared sound (beep, horn, fanfare: meta.sounds) or the current game's own (games[].sounds).
+  const soundFor = (game) => (name) => play(game?.sounds?.[name] || world?.meta?.sounds?.[name]);
+  let amb = null;
+  function ambient() {
+    const src = world?.meta?.ambient;
+    if (!src || !started || amb) return;
+    amb = new Audio(Hollia.root + src);
+    amb.loop = true; amb.volume = muted ? 0 : vol * 0.5;
+    amb.play().catch(() => {});
+  }
+  applySound();
+  $("start").onclick = () => { started = true; $("start").hidden = true; ambient(); update(); };
+
+  /* ---------- games ---------- */
+  const gameOf = (id) => world?.games?.find((g) => g.id === id);
+  const loading = {};
+  // The game's page module (games/<id>.js), or the stand-in when there isn't one yet.
+  function loadGame(id) {
+    if (MG.games[id]) return Promise.resolve(MG.games[id]);
+    return (loading[id] ||= new Promise((ok) => {
+      const s = document.createElement("script");
+      s.src = `games/${encodeURIComponent(id)}.js`;
+      s.onload = () => ok(MG.games[id] || MG.games.standin);
+      s.onerror = () => ok(MG.games.standin);
+      document.head.appendChild(s);
+    }));
+  }
+
+  function show(view) {
+    for (const v of ["vWait", "vIntro", "vPlay", "vBoard", "vSolo"]) $(v).hidden = v !== view;
+  }
+  function stopActive() { active?.runner?.stop(); active = null; }
+
+  // Start (or keep running) a game. what: { game, kind, seed, startsAt, endsAt } (server ms),
+  // report(score) when it ends.
+  function ensureRun(key, what, report) {
+    if (active?.key === key) {
+      if (!active.done) active.runner?.setTimes(what.startsAt, what.endsAt); // the DM ended it early
+      return show("vPlay");
+    }
+    stopActive();
+    const game = gameOf(what.game);
+    if (!game) return;
+    const mine = (active = { key, runner: null, done: false });
+    show("vPlay");
+    $("under").textContent = `${game.name} · ${what.kind === "real" ? "For real" : "Practice"} · ${game.intro?.how || ""}`;
+    loadGame(game.id).then((def) => {
+      if (active !== mine) return;
+      mine.runner = MG.run({
+        canvas: $("canvas"), def, game, kind: what.kind, seed: what.seed,
+        startsAt: what.startsAt, endsAt: what.endsAt, clock: SOLO ? Date.now : clock,
+        sound: soundFor(game),
+        onProgress: (score) => report.progress?.(score),
+        onDone: (score) => { mine.done = true; report.done(score); },
+      });
+    });
+  }
+
+  /* ---------- what to show ---------- */
+  function update() {
+    if (!world || SOLO) return;
+    const mg = shared.mg || { stage: "idle", boards: {} };
+
+    // A retry: just me, replaying a saved board's seed.
+    const t = mg.retry;
+    if (t?.player === me.id) {
+      const key = "retry:" + t.startsAt;
+      if (!sent.has(key)) return ensureRun(key, t, { done: (score) => { sent.add(key); send({ t: "mg", op: "done", retry: true, score, req: ++reqN }); } });
+    }
+
+    const r = mg.round;
+    if (mg.stage === "play" && r) {
+      const key = "round:" + r.id, inCast = r.cast.some((c) => c.id === me.id), mineDone = r.scores?.[me.id]?.done;
+      if (inCast && !mineDone && !sent.has(key)) {
+        // Arrived mid-round without the game running here (a refresh): the game is lost, the
+        // score so far counts. Just before it starts is still fine.
+        if (active?.key !== key && clock() > r.startsAt + 1000) {
+          sent.add(key);
+          send({ t: "mg", op: "done", round: r.id, score: null, req: ++reqN });
+        } else return ensureRun(key, r, {
+          progress: (score) => send({ t: "mg", op: "progress", round: r.id, score }),
+          done: (score) => { sent.add(key); send({ t: "mg", op: "done", round: r.id, score, req: ++reqN }); },
+        });
+      }
+      // Finished here but the server hasn't confirmed yet: the game's "Score" banner stays up.
+      if (active?.key === key && !mineDone) return show("vPlay");
+      // Done (or not in this round): watch the scores come in.
+      stopActive();
+      const name = gameOf(r.game)?.name || r.game;
+      $("boardNote").textContent = inCast ? "Waiting for the crew…" : "A round is on. You'll play the next one.";
+      $("board").innerHTML = MGBoard.html({ title: name, kind: r.kind, rows: MGBoard.fromRound(r), tiers: world.tiers, you: me.id, live: true });
+      return show("vBoard");
+    }
+    if (active && !active.key.startsWith("retry:")) stopActive();
+    if (active?.key.startsWith("retry:") && !mg.retry) stopActive();
+
+    if (mg.stage === "board" && mg.boards?.[mg.board]) {
+      const b = mg.boards[mg.board], name = gameOf(b.game)?.name || b.game;
+      // The for-real board's fanfare, once (not on a page load with it already up: lastBoard set in onWelcome).
+      if (lastBoard !== mg.board + b.at) { lastBoard = mg.board + b.at; if (b.kind === "real") play(world.meta?.sounds?.fanfare); }
+      $("boardNote").textContent = mg.retry ? `${mg.retry.name} is on a retry…` : b.kind === "real" ? "The repair is done." : "Practice is over. Next: for real.";
+      $("board").innerHTML = MGBoard.html({ title: name, kind: b.kind, rows: MGBoard.fromBoard(b), tiers: world.tiers, you: me.id });
+      return show("vBoard");
+    }
+    if (mg.stage === "intro" && gameOf(mg.game)) {
+      const g = gameOf(mg.game), i = world.games.indexOf(g);
+      $("introGame").textContent = `Repair ${i + 1} of ${world.games.length}: ${g.name}`;
+      $("introTitle").textContent = g.intro?.title || g.name;
+      $("introText").textContent = g.intro?.text || "";
+      $("introHow").textContent = g.intro?.how || "";
+      $("introTime").textContent = `${g.limit} seconds a round. A practice round first, then one for real.`;
+      return show("vIntro");
+    }
+    $("waitText").textContent = mg.retry ? `${mg.retry.name} is on a retry…` : "The DM will start the next game soon.";
+    show("vWait");
+  }
+  let lastBoard = null;
+
+  /* ---------- solo ---------- */
+  function soloSetup() {
+    $("soloGame").innerHTML = world.games.map((g) => `<option value="${g.id}">${g.name}</option>`).join("");
+    show("vSolo");
+  }
+  $("soloGo").onclick = () => {
+    const game = $("soloGame").value, kind = $("soloKind").value, G = gameOf(game);
+    const seed = $("soloSeed").value.trim() ? (+$("soloSeed").value >>> 0) : Math.floor(Math.random() * 2 ** 31);
+    const startsAt = Date.now() + (world.meta?.countdown ?? 3) * 1000;
+    $("soloResult").textContent = "";
+    ensureRun("solo:" + startsAt, { game, kind, seed, startsAt, endsAt: startsAt + G.limit * 1000 }, {
+      done: (score) => setTimeout(() => {
+        active = null;
+        $("soloResult").textContent = `${G.name}, ${kind === "real" ? "for real" : "practice"}: ${score} (seed ${seed})`;
+        $("vSolo").hidden = false;
+      }, 1500),
+    });
+    $("vSolo").hidden = false; // keep the picker under the game
+  };
+
+  /* ---------- connection ---------- */
+  const conn = Hollia.connect({
+    onWelcome(m) {
+      world = m.world; me = m.you; shared = m.shared || {}; skew = m.now - Date.now();
+      const up = shared.mg?.stage === "board" && shared.mg.boards?.[shared.mg.board];
+      if (up) lastBoard = shared.mg.board + up.at;
+      $("title").textContent = world.meta?.name || m.activity.name;
+      $("me").textContent = me.name + (SOLO ? " · solo" : "");
+      ambient();
+      if (!SOLO) return update();
+      // Solo only needs the world: hang up, so this page doesn't count as online (the DM's rounds
+      // would put it in the cast and it would show as dropped).
+      conn.stop();
+      $("status").className = ""; $("status").textContent = "Solo (not connected)";
+      soloSetup();
+    },
+    onMessage(m) {
+      if (m.t === "shared") { shared = m.shared || {}; if (m.now) skew = m.now - Date.now(); update(); }
+      else if (m.t === "mg-result" && m.error) console.warn(m.error);
+    },
+    onError(m) { console.warn(m.message); },
+    onStatus(s) {
+      if (SOLO && world) return;
+      $("status").className = s;
+      $("status").textContent = { online: "Online", offline: "Offline", connecting: "Connecting…" }[s];
+      $("offline").hidden = s !== "offline";
+    },
+  });
+  const send = (m) => { if (!SOLO) conn.send(m); };
+  $("logout").onclick = (e) => { e.preventDefault(); Hollia.logout(); };
+</script>
+</body>
+</html>

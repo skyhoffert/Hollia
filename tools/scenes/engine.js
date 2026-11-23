@@ -290,7 +290,7 @@
     // appearSound: played when a flag brings it in while you're here (once, however many at once).
     if (redraw) { playSound(shown.find((h) => h.appearSound && !prev[h.id])?.appearSound); updateFight(); }
     for (const [id, g] of Object.entries(prev)) {
-      if (hotEls[id]) hotEls[id].querySelectorAll(".a-settle, .a-rock, .a-emerge").forEach((e) => (e.style.animation = "none"));
+      if (hotEls[id]) hotEls[id].querySelectorAll(".a-settle, .a-rock, .a-emerge, .a-sweep, .a-fadein").forEach((e) => (e.style.animation = "none"));
       else if (g.querySelector(".a-emerge")) {
         g.querySelectorAll(".a-emerge").forEach((e) => (e.style.animation = "none"));
         g.removeAttribute("tabindex");
@@ -368,9 +368,10 @@
 
     // Other players standing at spots in this view. You see through your own
     // eyes, so your dot is never drawn; spots only say where OTHERS see you.
+    // A scene with showSelf: true (the voyage's ship: stations the DM puts you at) draws yours too.
     for (const [spid, sp] of Object.entries(s.spots || {})) {
-      const ps = presence.at(current, spid, posHere()).filter((p) => p.id !== ME);
-      ps.forEach((p, i) => letterDot(p, sp.x + (i - (ps.length - 1) / 2) * 19, sp.y, 8, "pdot"));
+      const ps = presence.at(current, spid, posHere()).filter((p) => s.showSelf || p.id !== ME);
+      ps.forEach((p, i) => letterDot(p, sp.x + (i - (ps.length - 1) / 2) * 19, sp.y, 8, p.id === ME ? "pdot me" : "pdot"));
     }
 
     // Players at other locations visible from here: smaller lettered dots, no
@@ -924,7 +925,9 @@
       else if (m.t === "moved") {
         // A refused move ("someone is already at the spyglass") brings us back with the reason.
         if (m.message && m.scene === current && (m.pos ?? null) === currentPos) narrate(m.message);
-        else go(m.scene, null, true, m.message, m.pos);
+        // The DM moved us to another spot in this same view (a station on the ship): no fade.
+        else if (m.scene === current && (m.pos ?? null) === currentPos) presence.move(ME, m.scene, m.spot, false);
+        else go(m.scene, m.spot, true, m.message, m.pos);
       }
       else if (m.t === "chance") onChance(m);
       else if (m.t === "shared") onShared(m.shared, m.now);

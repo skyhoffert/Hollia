@@ -104,6 +104,17 @@
                       100% { transform: rotate(0deg); } }
   /* Plays once when drawn: rocks back and forth by --amt degrees, dying down (the silo shovel). */
   .a-rock { animation: rock var(--d, 3s) ease-in-out both; }
+  /* Plays once when drawn, after --delay: sweeps from --dx/--dy px off its place, through it, to as
+     far the other side (the hafgufa's tail swiping across the view). */
+  .a-sweep { animation: sweep var(--d, 1.2s) ease-in var(--delay, 0s) both; }
+  @keyframes sweep { from { transform: translate(calc(var(--dx, 0) * 1px), calc(var(--dy, 0) * 1px)); }
+                     to { transform: translate(calc(var(--dx, 0) * -1px), calc(var(--dy, 0) * -1px)); } }
+  /* Plays once when drawn, after --delay: fades in and stays (a blackout). */
+  .a-fadein { animation: fadein var(--d, .6s) ease-in var(--delay, 0s) both; }
+  @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
+  /* A blackout (class "blackout" in a hotspot's art): the dots go too, once it's dark. */
+  #scene .presence { transition: opacity .3s; }
+  #scene:has(.blackout) .presence { opacity: 0; transition-delay: var(--blackout-delay, .8s); }
   @keyframes rock { 0%, 100% { transform: rotate(0deg); }
                     10% { transform: rotate(calc(var(--amt, 6) * -1deg)); }
                     25% { transform: rotate(calc(var(--amt, 6) * .8deg)); }

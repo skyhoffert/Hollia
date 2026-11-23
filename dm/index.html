@@ -23,6 +23,12 @@
 
   .card { background: #221c33; border: 1px solid #3a3152; border-radius: 12px; padding: 16px; margin-bottom: 14px; }
   .card.closed { opacity: .75; }
+  /* Collapsible cards: click a card's title (data-sec on the card; remembered in this browser). */
+  .card[data-sec] > .head h2 { cursor: pointer; user-select: none; }
+  .card[data-sec] > .head h2::before { content: "▾"; display: inline-block; width: 18px; color: #9a8f7a; font-size: 14px; }
+  .card.collapsed > .head h2::before { content: "▸"; }
+  .card.collapsed > :not(.head) { display: none !important; }
+  .card.collapsed { padding-bottom: 12px; }
   .head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .pill { font: 600 11px system-ui, sans-serif; letter-spacing: .05em; text-transform: uppercase; border-radius: 99px; padding: 2px 8px; }
   .pill.open { background: #2d4a2a; color: #9be08f; }
@@ -54,6 +60,16 @@
   .rounds .r-round { font: 600 11px system-ui, sans-serif; color: #9a8f7a; text-transform: uppercase; margin-top: 6px; }
   .rounds .r-dm { color: #f6c27a; font-style: italic; }
 
+  /* Minigames panel (tool "minigames": the ship repairs). Boards: ../tools/minigames/board.js. */
+  .mg { margin-top: 14px; padding: 10px 12px; border: 1px solid #4a3f66; border-radius: 10px; background: #1c1729; }
+  .mg h3 { margin: 0 0 6px; font-size: 15px; color: #f6c27a; }
+  .mg .clock { font-weight: 600; color: #cfe8fa; }
+  .mg .mgb { margin-top: 10px; }
+  .mg button.on { background: #1f3a52; border-color: #9fd0f0; color: #cfe8fa; }
+  .mg button:disabled { opacity: .4; cursor: not-allowed; }
+  .mg table.sum { margin-top: 8px; }
+  .mg table.sum th { font: 600 12px system-ui, sans-serif; color: #9a8f7a; text-align: left; padding: 4px; }
+  .mg table.sum td.best { color: #f6c27a; font-weight: 600; }
   table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 14px; }
   td { padding: 6px 4px; border-top: 1px solid #2f2745; vertical-align: middle; }
   td.name { display: flex; align-items: center; gap: 8px; }
@@ -140,7 +156,7 @@
     </header>
     <div id="acts"></div>
     <!-- Custom items made on the spot (server/inventory.js addCustom; kept in data/custom-items.json). -->
-    <section class="card" id="makecard">
+    <section class="card" id="makecard" data-sec="make">
       <div class="head"><h2>Make an item</h2><span class="muted">Something unique, made up on the spot. Shard / scroll: type the spell (always 1x1, can be attuned). Weapon: a sword in your color. Plain item: a tag with its first letter. Then give it to a player or put it in a stash (Give / Put here).</span></div>
       <form class="row" id="makeForm">
         <select id="mkKind" title="What kind of item">
@@ -156,11 +172,11 @@
       </form>
     </section>
     <!-- Every character back to base (server: dm reset-characters). -->
-    <section class="card">
+    <section class="card" data-sec="chars">
       <div class="head"><h2>Characters</h2><span class="muted">Reset all: everyone gets the starting kit back, both hands and feet, no afflictions or char.* flags, no attunements, and can find things again. The crew's crate (shared by every activity) goes back to its start. Activities keep their own memory (use an activity's Reset for that).</span></div>
       <div class="row"><button id="resetChars">Reset all characters</button></div>
     </section>
-    <section class="card" id="logcard">
+    <section class="card" id="logcard" data-sec="log">
       <div class="head"><h2>Play log</h2><span class="muted">Everything players do, newest first. Kept in data/log/ (see scripts/log.js).</span></div>
       <div class="row">
         <select id="logWho"><option value="">Everyone</option></select>
@@ -173,6 +189,7 @@
   <div id="toast" hidden></div>
 </main>
 <script src="../client.js"></script>
+<script src="../tools/minigames/board.js"></script>
 <script>
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -256,8 +273,10 @@
         }).join("");
       };
       const moveMenus = (p) => {
-        const sel = p.pos != null ? `${p.scene}@${p.pos}` : p.scene;
-        const list = a.scenes || [], cur = list.find((s) => s.id === sel);
+        // A station (a scene with several spots, "id#spot") when the scene lists them, else the room.
+        const list = a.scenes || [];
+        const sel = p.pos != null ? `${p.scene}@${p.pos}` : list.some((s) => s.id === `${p.scene}#${p.spot}`) ? `${p.scene}#${p.spot}` : p.scene;
+        const cur = list.find((s) => s.id === sel);
         const main = roomOpts(sel, cur);
         const attrs = `data-move="${esc(p.id)}" data-act="${esc(a.id)}"`;
         const sub = cur?.group ? `<select ${attrs}>${list.filter((s) => s.group === cur.group).map((s) => opt(s.id, s.label, s.id === sel)).join("")}</select>` : "";
@@ -282,7 +301,7 @@
         </td></tr>`).join("");
 
       return `
-      <section class="card ${a.open ? "" : "closed"}">
+      <section class="card ${a.open ? "" : "closed"}${collapsed.has("act:" + a.id) ? " collapsed" : ""}" data-sec="act:${esc(a.id)}">
         <div class="head">
           <h2>${esc(a.name)}</h2>
           <span class="pill ${a.open ? "open" : "closed"}">${a.open ? "Open" : "Closed"}</span>
@@ -323,6 +342,7 @@
           <button data-announce="${esc(a.id)}">Send</button>
         </div>` : ""}
         ${(a.roundScenes || []).map((rs) => roundsBox(a, rs)).join("")}
+        ${a.mgGames ? mgBox(a) : ""}
         ${a.players.length ? `<table>${rows}</table>` : `<p class="muted" style="margin:12px 0 0">Nobody has joined yet.</p>`}
         ${(a.places || []).length ? placesBox(a) : ""}
       </section>`;
@@ -465,7 +485,9 @@
     const wf = a.worldFlags || [], act = esc(a.id);
     if (!g.flags) {
       const on = wf.includes(g.flag);
-      return `<span class="toggle ${on ? "on" : ""}" data-wflag="${esc(g.flag)}" data-act="${act}" title="${esc(g.flag)}">${on ? "✦ " : ""}${esc(g.label)}</span>`;
+      // pulse: momentary (the hafgufa's roar): the server switches it off again after that many seconds.
+      const tip = g.pulse ? `${g.flag}: on for ${g.pulse} s, then off by itself` : g.flag;
+      return `<span class="toggle ${on ? "on" : ""}" data-wflag="${esc(g.flag)}" data-act="${act}" title="${esc(tip)}">${on ? "✦ " : g.pulse ? "▶ " : ""}${esc(g.label)}</span>`;
     }
     const n = g.flags.filter((f) => wf.includes(f)).length;
     return `<span class="tgroup"><span class="toggle ${n ? "on" : ""}" data-wgroup="${esc(g.flags.join(" "))}" data-act="${act}"
@@ -510,6 +532,69 @@
     e.textContent = Math.max(0, Math.ceil((+e.dataset.clock - (Date.now() + clockSkew)) / 1000)) + "s left";
   }), 250);
 
+  /* Minigames panel (tool "minigames", server/tools/minigames.js): pick the game, intro, start
+     practice / for real, end early, live scores, retries, every saved board and a summary. */
+  const mgView = {}; // activity -> the saved board key shown under Scoreboards
+  function mgBox(a) {
+    const mg = a.mg || { stage: "idle", boards: {} }, act = esc(a.id), r = mg.round, t = mg.retry;
+    const gname = (id) => a.mgGames.find((g) => g.id === id)?.name || id;
+    const kname = (k) => (k === "real" ? "for real" : "practice");
+    const boards = a.mgGames.flatMap((g) => ["practice", "real"].map((k) => `${g.id}:${k}`)).filter((k) => mg.boards?.[k]);
+    const busy = !!(r || t);
+    const onBoard = mg.boards?.[mg.board];
+    const stage = r ? `<b>${esc(gname(r.game))}, ${kname(r.kind)}</b> <span class="clock" data-mgclock="${r.startsAt}|${r.endsAt}"></span>`
+      : t ? `<b>${esc(t.name)}</b> is on a retry (${esc(gname(t.game))}, ${kname(t.kind)}) <span class="clock" data-mgclock="${t.startsAt}|${t.endsAt}"></span>`
+      : mg.stage === "intro" ? `Players see: the intro for <b>${esc(gname(mg.game))}</b>`
+      : mg.stage === "board" && onBoard ? `Players see: the ${kname(onBoard.kind)} board for <b>${esc(gname(onBoard.game))}</b>`
+      : "Players see: waiting for the DM";
+    const players = a.players.filter((p) => p.online);
+    const shown = mgView[a.id] && mg.boards?.[mgView[a.id]];
+    // Summary: every player x every game's for-real score, the best per game highlighted.
+    const real = a.mgGames.filter((g) => mg.boards?.[g.id + ":real"]);
+    const names = new Map();
+    for (const g of real) for (const s of mg.boards[g.id + ":real"].scores) names.set(s.id, s.name);
+    const bestOf = (g) => Math.max(0, ...mg.boards[g.id + ":real"].scores.map((s) => s.score));
+    const cell = (g, id) => {
+      const me = mg.boards[g.id + ":real"].scores.find((s) => s.id === id);
+      return me ? `<td class="${me.score === bestOf(g) ? "best" : ""}">${me.score}${me.dropped ? "*" : ""}</td>` : `<td class="muted">-</td>`;
+    };
+    const summary = real.length ? `<table class="sum"><tr><th></th>${real.map((g) => `<th>${esc(g.name)}</th>`).join("")}</tr>
+      ${[...names].map(([id, n]) => `<tr><td>${esc(n)}</td>${real.map((g) => cell(g, id)).join("")}</tr>`).join("")}
+      <tr><td class="muted">Repair</td>${real.map((g) => `<td>${esc(MGBoard.tier(bestOf(g), a.mgTiers)?.name || "")} (${bestOf(g)})</td>`).join("")}</tr></table>
+      <div class="muted">For-real scores; * = dropped mid-round (their score so far).</div>` : "";
+    return `<div class="mg">
+      <h3>Minigames</h3>
+      <div class="row">
+        <select data-mg-pick="${act}" data-field="mggame-${act}">${a.mgGames.map((g, i) => `<option value="${esc(g.id)}"${g.id === mg.game ? " selected" : ""}>${i + 1}. ${esc(g.name)} (${g.limit} s)</option>`).join("")}</select>
+        <button data-mg="intro" data-act="${act}" ${busy ? "disabled" : ""}>Show intro</button>
+        <button class="primary" data-mg="practice" data-act="${act}" ${busy ? "disabled" : ""}>Start practice</button>
+        <button class="primary" data-mg="real" data-act="${act}" ${busy ? "disabled" : ""}>Start for real</button>
+        ${r ? `<button class="danger" data-mg="end" data-act="${act}">End round early</button>` : ""}
+        <span class="spacer"></span>
+        <button data-mg="idle" data-act="${act}" ${busy ? "disabled" : ""} title="Players go back to the waiting screen">Waiting screen</button>
+      </div>
+      <div class="row"><span>${stage}</span></div>
+      ${r ? MGBoard.html({ title: gname(r.game), kind: r.kind, rows: MGBoard.fromRound(r), tiers: a.mgTiers, live: true }) : ""}
+      ${boards.length ? `<div class="row">
+        <span class="muted">Retry</span>
+        <select data-field="mgrp-${act}">${players.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join("")}</select>
+        <select data-field="mgrb-${act}">${boards.map((k) => `<option value="${esc(k)}">${esc(gname(mg.boards[k].game))}, ${kname(mg.boards[k].kind)}</option>`).join("")}</select>
+        <button data-mg="retry" data-act="${act}" ${busy || !players.length ? "disabled" : ""} title="They replay that board's round alone (same layout); their new score replaces theirs">Give retry</button>
+      </div>
+      <div class="row"><span class="muted">Scoreboards</span>
+        ${boards.map((k) => `<button class="${mgView[a.id] === k ? "on" : ""}" data-mg-view="${esc(k)}" data-act="${act}">${esc(gname(mg.boards[k].game))}: ${kname(mg.boards[k].kind)}</button>`).join("")}
+      </div>
+      ${shown ? MGBoard.html({ title: gname(shown.game), kind: shown.kind, rows: MGBoard.fromBoard(shown), tiers: a.mgTiers })
+        + `<div class="muted">Played ${esc(new Date(shown.at).toLocaleString())} · seed ${shown.seed}</div>` : ""}
+      ${summary}` : `<p class="muted" style="margin:8px 0 0">No saved scoreboards yet.</p>`}
+    </div>`;
+  }
+  // Minigame clocks: the countdown, then time left.
+  setInterval(() => document.querySelectorAll("[data-mgclock]").forEach((e) => {
+    const [s, end] = e.dataset.mgclock.split("|").map(Number), now = Date.now() + clockSkew;
+    e.textContent = now < s ? `starts in ${Math.ceil((s - now) / 1000)}s` : now < end ? `${Math.ceil((end - now) / 1000)}s left` : "time's up, collecting scores…";
+  }), 250);
+
   function placesBox(a) {
     const used = a.places.filter((pl) => pl.items.length || pl.coins);
     const rows = a.places.map((pl, i) => `<div class="place"><div class="inv"><b>${esc(pl.label)}</b>
@@ -550,6 +635,14 @@
       case "roam": return e.act === "feed" ? `<b style="color:#9be08f">fed the ${esc(e.roamer)}</b> (farm ${esc(e.at)})`
                         : e.act === "release" ? `let the ${esc(e.roamer)} go without the seed; it flew home (farm ${esc(e.at)})`
                         : `sent the ${esc(e.roamer)} flying (farm ${esc(e.from)} → ${esc(e.to)})`;
+      case "mg": {
+        const k = e.kind === "real" ? "for real" : "practice";
+        return { done: `${esc(e.game)} (${k}): scored ${e.score}${e.dropped ? " (dropped)" : ""}`,
+          drop: `dropped out of ${esc(e.game)} (${k}) at ${e.score}`,
+          retry: `<b>retry</b> ${esc(e.game)} (${k}): scored ${e.score}`,
+          "retry-timeout": `${esc(e.name)}'s retry of ${esc(e.game)} (${k}) ran out of time; the old score stands`,
+          board: `<b>${esc(e.game)} board</b> (${k}): ${(e.scores || []).map((s) => `${esc(s.name)} ${s.score}`).join(", ") || "nobody"}` }[e.op] || "minigames " + esc(e.op);
+      }
       case "announce": return `<b style="color:#f6c27a">announced</b> “${esc(e.text)}”`;
       // Minigames (the shore gull): a try, how it went, the DM's call on a loss.
       case "game": return e.op === "pick" ? `${esc(e.game)} game: picked shell ${e.shell + 1} (round ${e.round}, pot ${e.pot}): waiting on the DM`
@@ -620,6 +713,29 @@
   /* ---------- actions ---------- */
   const actName = (id) => state.activities.find((a) => a.id === id)?.name || id;
   $("acts").addEventListener("click", (e) => {
+    // Minigames panel.
+    const mv = e.target.closest("[data-mg-view]");
+    if (mv) { mgView[mv.dataset.act] = mgView[mv.dataset.act] === mv.dataset.mgView ? null : mv.dataset.mgView; return render(); }
+    const mb = e.target.closest("[data-mg]");
+    if (mb) {
+      const act = mb.dataset.act, a = state.activities.find((x) => x.id === act), op = mb.dataset.mg;
+      const val = (f) => document.querySelector(`[data-field="${f}-${CSS.escape(act)}"]`)?.value;
+      const game = val("mggame"), gname = a.mgGames.find((g) => g.id === game)?.name || game;
+      if (op === "intro") return send(act, { do: "tool", action: { intro: game } });
+      if (op === "idle") return send(act, { do: "tool", action: { idle: true } });
+      if (op === "end") return confirm("End the round now? Everyone's game stops and their score so far counts.") && send(act, { do: "tool", action: { end: true } });
+      if (op === "practice" || op === "real") {
+        if (a.mg?.boards?.[`${game}:${op}`] && !confirm(`${gname} already has a ${op === "real" ? "for-real" : "practice"} scoreboard. Playing it again replaces it. Go on?`)) return;
+        return send(act, { do: "tool", action: { start: op, game } });
+      }
+      if (op === "retry") {
+        const player = val("mgrp"), board = val("mgrb");
+        const pn = a.players.find((p) => p.id === player)?.name || player;
+        return player && board && confirm(`${pn} replays that round alone, starting now. Their new score replaces their old one on the board.`)
+          && send(act, { do: "tool", action: { retry: player, board } });
+      }
+      return;
+    }
     const u = e.target.closest("[data-unflag]");
     if (u) return send(u.dataset.act, { do: "flags", player: u.dataset.player, unset: [u.dataset.unflag] });
     // The shell game: mark the pick right or wrong.
@@ -716,7 +832,8 @@
         if (a.players.some((p) => p.online) && !confirm(`Close ${actName(id)}? Everyone in it is sent back to the login page.`)) return;
         return send(id, { do: "close" });
       case "reset":
-        if (!confirm(`Reset ${actName(id)}? Everyone goes back to the start, all memory flags are cleared and freezes are lifted. This can't be undone.`)) return;
+        if (!confirm(a.mgGames ? `Reset ${actName(id)}? Every saved scoreboard is deleted and any round stops. This can't be undone.`
+          : `Reset ${actName(id)}? Everyone goes back to the start, all memory flags are cleared and freezes are lifted. This can't be undone.`)) return;
         return send(id, { do: "reset" });
       case "send-all":
         const to = field("all");
@@ -756,6 +873,8 @@
       if (limb && confirm(`${p?.name || "They"} loses the ${limb.endsWith("Foot") ? limb.replace("Foot", "") + " foot" : limb + " hand"}?`)) send(d.act, { do: "limb", player: d.limbLose, limb });
       return;
     }
+    const mp = e.target.closest("select[data-mg-pick]");
+    if (mp) { send(mp.dataset.mgPick, { do: "tool", action: { pick: mp.value } }); mp.blur(); return; }
     const s = e.target.closest("select[data-move]");
     if (s) { send(s.dataset.act, { do: "tool", action: { move: s.dataset.move, scene: s.value } }); s.blur(); }
   });
@@ -832,6 +951,19 @@
 
   $("loginForm").onsubmit =(e) => { e.preventDefault(); Hollia.setServer($("server").value); key = $("key").value.trim(); $("err").textContent = ""; connect(); };
   $("logout").onclick = (e) => { e.preventDefault(); store.set("hollia.dmKey", null); location.reload(); };
+
+  // Collapsible cards: click a card's title to fold it to its header row. Which ones are folded
+  // ("act:<id>", "make", "chars", "log") is kept in this browser; activity cards keep it across redraws.
+  const collapsed = new Set((() => { try { return JSON.parse(store.get("hollia.dmCollapsed")) || []; } catch { return []; } })());
+  document.querySelectorAll(".card[data-sec]").forEach((c) => c.classList.toggle("collapsed", collapsed.has(c.dataset.sec)));
+  document.addEventListener("click", (e) => {
+    const h = e.target.closest(".card[data-sec] > .head h2");
+    if (!h) return;
+    const card = h.closest(".card"), sec = card.dataset.sec;
+    collapsed.has(sec) ? collapsed.delete(sec) : collapsed.add(sec);
+    card.classList.toggle("collapsed", collapsed.has(sec));
+    store.set("hollia.dmCollapsed", JSON.stringify([...collapsed]));
+  });
 
   connect();
 </script>

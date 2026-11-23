@@ -8,7 +8,8 @@
                         which re-enters with the saved key
        onError(msg)     server rejected something
        onStatus(s)      "connecting" | "online" | "offline"
-     returns { send(msg) }
+     returns { send(msg), stop(done?) }  stop: hang up for good (no reconnect), e.g. the minigames
+                                         page's ?solo mode once it has the world
    Hollia.session()               saved { token, name, activity, tool } or null
    Hollia.logout()                forget the session, back to the login page
    Hollia.versionProblem(msg)     welcome / dm-welcome from a server on another protocol
@@ -154,7 +155,7 @@ window.Hollia = (() => {
     addEventListener("pageshow", (e) => { if (e.persisted) open(); });
     open();
     live = { stop };
-    return { send(m) { if (ws.readyState === 1) ws.send(JSON.stringify(m)); } };
+    return { send(m) { if (ws.readyState === 1) ws.send(JSON.stringify(m)); }, stop };
   }
   let live = null;
 
