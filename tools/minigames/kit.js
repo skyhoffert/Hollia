@@ -113,7 +113,7 @@ window.MG = (() => {
   /* Run one round of a game on a canvas.
      opts: { canvas, def (the registered game), game (world entry), kind, seed, startsAt, endsAt
              (ms on clock()), clock (() -> ms, the server's clock), sound(name), onProgress(score),
-             onDone(score) }
+             onDone(score), waiting? (the line under the score once done; default "Waiting for the crew…") }
      Before startsAt: the first frame with a 3-2-1 over it (a beep per number). Then the game until
      endsAt or its done(); then end() and `settle` more seconds of play (the tower settles), then
      onDone(score). Returns { setTimes(startsAt, endsAt) (the DM ended it early), stop() }. */
@@ -184,7 +184,7 @@ window.MG = (() => {
         g.font = "22px Georgia, serif"; g.fillStyle = "#d8ccb0";
         g.fillText(o.kind === "real" ? "For real" : "Practice", W / 2, H / 2 + 80);
       } else if (ph === "settle" || ph === "over") {
-        banner(g, ph === "over" ? `Score: ${score()}` : "Time!", ph === "over" ? "Waiting for the crew…" : "");
+        banner(g, ph === "over" ? `Score: ${score()}` : "Time!", ph === "over" ? (o.waiting ?? "Waiting for the crew…") : "");
       }
     }
     requestAnimationFrame(frame);

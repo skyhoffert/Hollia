@@ -103,7 +103,7 @@
     <p class="lead" id="soloResult"></p>
   </section>
 </main>
-<button id="start">Click to join the crew<small>(this also turns on the sound)</small></button>
+<button id="start"><span id="startText">Click to join the crew</span><small>(this also turns on the sound)</small></button>
 <div id="offline" hidden><div class="box">Lost the connection. Reconnecting…</div></div>
 
 <script src="../../client.js"></script>
@@ -117,6 +117,9 @@
                   set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
 
   let world = null, me = null, shared = {}, skew = 0, started = false, reqN = 0;
+  // Player-facing words a world can change (meta.words; FORMAT.md "Minigames worlds"). Defaults: the ship repairs.
+  const WORDS = { start: "Click to join the crew", waiting: "Waiting for the crew…", done: "The repair is done.", step: "Repair", tier: "repair" };
+  const word = (k) => world?.meta?.words?.[k] ?? WORDS[k];
   const clock = () => Date.now() + skew; // the server's clock
   // The game running in this page: { key: "round:<id>" | "retry:<startsAt>" | "solo", runner, done }.
   let active = null;
@@ -195,7 +198,7 @@
       mine.runner = MG.run({
         canvas: $("canvas"), def, game, kind: what.kind, seed: what.seed,
         startsAt: what.startsAt, endsAt: what.endsAt, clock: SOLO ? Date.now : clock,
-        sound: soundFor(game),
+        sound: soundFor(game), waiting: word("waiting"),
         onProgress: (score) => report.progress?.(score),
         onDone: (score) => { mine.done = true; report.done(score); },
       });
@@ -233,8 +236,8 @@
       // Done (or not in this round): watch the scores come in.
       stopActive();
       const name = gameOf(r.game)?.name || r.game;
-      $("boardNote").textContent = inCast ? "Waiting for the crew…" : "A round is on. You'll play the next one.";
-      $("board").innerHTML = MGBoard.html({ title: name, kind: r.kind, rows: MGBoard.fromRound(r), tiers: world.tiers, you: me.id, live: true });
+      $("boardNote").textContent = inCast ? word("waiting") : "A round is on. You'll play the next one.";
+      $("board").innerHTML = MGBoard.html({ title: name, kind: r.kind, rows: MGBoard.fromRound(r), tiers: world.tiers, tierWord: word("tier"), you: me.id, live: true });
       return show("vBoard");
     }
     if (active && !active.key.startsWith("retry:")) stopActive();
@@ -244,13 +247,13 @@
       const b = mg.boards[mg.board], name = gameOf(b.game)?.name || b.game;
       // The for-real board's fanfare, once (not on a page load with it already up: lastBoard set in onWelcome).
       if (lastBoard !== mg.board + b.at) { lastBoard = mg.board + b.at; if (b.kind === "real") play(world.meta?.sounds?.fanfare); }
-      $("boardNote").textContent = mg.retry ? `${mg.retry.name} is on a retry…` : b.kind === "real" ? "The repair is done." : "Practice is over. Next: for real.";
-      $("board").innerHTML = MGBoard.html({ title: name, kind: b.kind, rows: MGBoard.fromBoard(b), tiers: world.tiers, you: me.id });
+      $("boardNote").textContent = mg.retry ? `${mg.retry.name} is on a retry…` : b.kind === "real" ? word("done") : "Practice is over. Next: for real.";
+      $("board").innerHTML = MGBoard.html({ title: name, kind: b.kind, rows: MGBoard.fromBoard(b), tiers: world.tiers, tierWord: word("tier"), you: me.id });
       return show("vBoard");
     }
     if (mg.stage === "intro" && gameOf(mg.game)) {
       const g = gameOf(mg.game), i = world.games.indexOf(g);
-      $("introGame").textContent = `Repair ${i + 1} of ${world.games.length}: ${g.name}`;
+      $("introGame").textContent = `${word("step")} ${i + 1} of ${world.games.length}: ${g.name}`;
       $("introTitle").textContent = g.intro?.title || g.name;
       $("introText").textContent = g.intro?.text || "";
       $("introHow").textContent = g.intro?.how || "";
@@ -290,6 +293,7 @@
       if (up) lastBoard = shared.mg.board + up.at;
       $("title").textContent = world.meta?.name || m.activity.name;
       $("me").textContent = me.name + (SOLO ? " · solo" : "");
+      $("startText").textContent = word("start");
       ambient();
       if (!SOLO) return update();
       // Solo only needs the world: hang up, so this page doesn't count as online (the DM's rounds

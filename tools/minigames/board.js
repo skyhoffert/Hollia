@@ -1,7 +1,8 @@
 /* The minigames scoreboard: one look for practice and for-real boards, live (a round still going)
    or saved. Used by the minigames page and the DM page (it loads this file too).
 
-   MGBoard.html({ title, kind, rows, tiers, you?, live? }) -> HTML string
+   MGBoard.html({ title, kind, rows, tiers, tierWord?, you?, live? }) -> HTML string
+     tierWord: the word after the tier name ("Solid repair: best score 80"; default "repair")
      rows: [{ id, name, color, score, done?, dropped?, retried? }] (done false = still playing)
      kind "practice": a Practice label. kind "real": the best score highlighted, with its tier.
    MGBoard.fromBoard(board) / MGBoard.fromRound(round) -> rows (saved board / shared.mg.round)
@@ -17,7 +18,7 @@ window.MGBoard = (() => {
     return { ...c, score: s.score ?? 0, done: !!s.done, dropped: !!s.dropped };
   });
 
-  function html({ title, kind, rows, tiers, you, live }) {
+  function html({ title, kind, rows, tiers, tierWord = "repair", you, live }) {
     const done = rows.filter((r) => r.done).sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
     const playing = rows.filter((r) => !r.done);
     const real = kind === "real";
@@ -34,7 +35,7 @@ window.MGBoard = (() => {
     }).join("");
     return `<div class="mgb">
       <div class="mgb-h"><b>${esc(title)}</b> <span class="mgb-k ${real ? "real" : ""}">${real ? "For real" : "Practice"}</span></div>
-      ${t ? `<div class="mgb-tier"><b>${esc(t.name)}</b> repair: best score ${best.score}${t.say ? ` <span>${esc(t.say)}</span>` : ""}</div>` : ""}
+      ${t ? `<div class="mgb-tier"><b>${esc(t.name)}</b>${tierWord ? " " + esc(tierWord) : ""}: best score ${best.score}${t.say ? ` <span>${esc(t.say)}</span>` : ""}</div>` : ""}
       ${list ? `<ol>${list}</ol>` : ""}
       ${playing.length ? `<div class="mgb-wait">Still playing… ${playing.map((r) => esc(r.name)).join(", ")}</div>` : ""}
       ${!rows.length ? `<div class="mgb-wait">Nobody played this round.</div>` : ""}
