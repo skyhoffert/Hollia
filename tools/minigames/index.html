@@ -292,6 +292,7 @@
       const up = shared.mg?.stage === "board" && shared.mg.boards?.[shared.mg.board];
       if (up) lastBoard = shared.mg.board + up.at;
       $("title").textContent = world.meta?.name || m.activity.name;
+      document.title = `Hollia - ${m.activity.name}`;
       $("me").textContent = me.name + (SOLO ? " · solo" : "");
       $("startText").textContent = word("start");
       ambient();

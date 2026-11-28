@@ -100,6 +100,7 @@ welcome {
   - `flags: { "world.<fact>": true }` (also in everyone's `flags` list)
   - `roam: { <roamerId>: { stage, until?, heldBy? } }`: `stage` = index in the roamer's route,
     `until` = server ms when it flies home, `heldBy` = player id it's waiting for
+  - `roamStay: { <roamerId>: seconds }`: the DM's wait time per stop (overrides the world's `stay`)
   - `last: { <group>: sceneId }`: the last scene used in a remembering exclusive group (the spyglass)
   - `rounds: { <sceneId>: { n, endsAt, cast: [{ id, name }], answered: [playerId], log: [entry] } }`:
     timed rounds (the cave fight). `endsAt` = server ms or null. Log entries:
@@ -139,7 +140,7 @@ it; its full authoring format is `worlds/FORMAT.md` in the server repo. The page
 | key | used by | what |
 |---|---|---|
 | `meta` | engine | `viewBox`, `startScene`, `ambient`, `birds`, `moveSound`, `announceSound` |
-| `scenes` | engine | every scene: art layers, hotspots, exits, spots, positions, narration, sounds |
+| `scenes` | engine | every scene: art layers, hotspots (a hotspot with no `shape` is art only; `afterLayer: n` draws it right after that layer), exits, spots, positions, narration, sounds. A scene's `dm` (DM-only script and notes) is removed before sending |
 | `dialogues` | engine | conversations (nodes, choices, conditions, actions) |
 | `shops` | pack | what each shop sells and buys |
 | `trades`, `heals` | engine | NPC trades and limb heals offered in dialogue |
@@ -254,13 +255,14 @@ next `dm-state` (sent at most every 100 ms after any change). Failures come back
 | `limb` | `player, limb: left\|right\|leftFoot\|rightFoot, back?` | take a hand/foot, or give it back |
 | `tool` | `action: { pick \| intro \| start \| end \| retry \| idle }` | minigames: `{ pick: game }` choose the game; `{ intro: game? }` show its intro; `{ start: "practice"\|"real", game? }` a round for everyone online (countdown `meta.countdown` s, then the game's `limit`); `{ end: true }` time's up now (pages still send scores); `{ retry: playerId, board: "<game>:<kind>" }` that player replays the board's seed alone; `{ idle: true }` back to the waiting screen |
 | `tool` | `action: { move: playerId\|"all", scene }` | scenes: move players (`scene` can be `"id@pos"`, or `"id#spot"` for a station: a scene with 2+ spots, listed per spot in `dm-state`'s `scenes`) |
+| `tool` | `action: { stay: roamerId, seconds }` | scenes: how long a roamer waits at each stop, from its next hop (3-600; `seconds: null` = back to the world's) |
 | `inv` | `action` | edit an inventory or stash: `{ player \| place, give \| remove \| coins \| kit \| attune \| restoreHand \| restore \| empty, ... }` |
 
 Server -> DM page:
 
 | message | what |
 |---|---|
-| `dm-state { now, roster, items, activities }` | everything, on every change. `roster: [{ id, name, dm, color }]`; each activity: `{ id, name, tool, content, open, only, guestKey, controls, worldFlags, rounds, answers, players, places, ... }`, players with `flags`, `game`, `gameLevels`, `gameCoins`, `inv`; scenes activities add `scenes`, `toggles`, `roundScenes`, `games`, `shellsAnte`, `gameAnnounce`, `afflictions`, `announcements`; minigames activities add `mgGames: [{ id, name, limit }]`, `mgTiers`, `mg` (the `<mg>` above) (or `error` if the world failed to load). |
+| `dm-state { now, roster, items, activities }` | everything, on every change. `roster: [{ id, name, dm, color }]`; each activity: `{ id, name, tool, content, open, only, guestKey, controls, worldFlags, rounds, answers, players, places, ... }`, players with `flags`, `game`, `gameLevels`, `gameCoins`, `inv`; scenes activities add `scenes`, `toggles`, `roundScenes`, `roamers: [{ id, name, stay, base }]` (a theater slide's `scenes` entry can carry `dm: { script, notes }`), `games`, `shellsAnte`, `gameAnnounce`, `afflictions`, `announcements`; minigames activities add `mgGames: [{ id, name, limit }]`, `mgTiers`, `mg` (the `<mg>` above) (or `error` if the world failed to load). |
 | `dm-log { entries }` | the last 500 play log entries, on login |
 | `dm-log-entry { entry }` | each new log entry, live. Entries: `{ ts, ev, activity?, player?, name?, ... }` |
 

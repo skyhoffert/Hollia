@@ -89,6 +89,9 @@
   // currentPos: where in the current scene we are, for a scene with positions (the seed
   // farms; see the world file header), else null. Changes with the view, like current.
   let current = null, currentPos = null, hotRoot = null, leaveRoot = null, presRoot = null, birdRoot = null;
+  let layerSlots = []; // a <g> right after each layer, for hotspots with afterLayer (renderScene)
+  // Where a hotspot draws: its afterLayer slot (behind the layers above it), else over every layer.
+  const hotParent = (h) => (h.afterLayer != null && layerSlots[h.afterLayer]) || hotRoot;
   // Animated layers of the current scene ({ a: anim, node }), so remote dots can move in step.
   let layerAnims = [];
   // Give node the anim, in step with a layer that has the same one (the spyglass sway):
@@ -114,10 +117,16 @@
     const layerRoot = el("g", {}, svg);
     // Layers with `chance: true` show only when this visit's roll hit, `chance: false` only when it missed.
     layerAnims = [];
-    (s.layers || []).filter((L) => L.chance == null || L.chance === chanceHit()).forEach((L) => {
-      const node = fragment(L.svg, layerRoot);
-      applyAnim(node, L.anim);
-      if (L.anim) layerAnims.push({ a: L.anim, node });
+    // Each layer gets an empty slot right after it for hotspots with afterLayer: n (drawn behind
+    // the layers above that one: the hafgufa's head behind the ship).
+    layerSlots = [];
+    (s.layers || []).forEach((L, i) => {
+      if (L.chance == null || L.chance === chanceHit()) {
+        const node = fragment(L.svg, layerRoot);
+        applyAnim(node, L.anim);
+        if (L.anim) layerAnims.push({ a: L.anim, node });
+      }
+      layerSlots[i] = el("g", {}, layerRoot);
     });
     birdRoot = el("g", { class: "birds", "pointer-events": "none" }, svg); // above the scenery, below hotspots
     // Things fading out (a-emerge art whose flag went away) get their own layer under the
@@ -197,6 +206,7 @@
   function scaleAnchor(h) {
     if (h.scaleAnchor) return { x: h.scaleAnchor[0], y: h.scaleAnchor[1] };
     const sh = h.shape;
+    if (!sh) return { x: 0, y: 0 }; // art-only (no shape): give it a scaleAnchor to scale it
     if (sh.type === "rect") return { x: sh.x + sh.w / 2, y: sh.y + sh.h };
     if (sh.type === "circle") return { x: sh.x, y: sh.y + sh.r };
     if (sh.type === "ellipse") return { x: sh.x, y: sh.y + sh.ry };
@@ -273,6 +283,7 @@
     if (!hotRoot) return;
     const prev = redraw ? { ...hotEls } : {};
     hotRoot.innerHTML = "";
+    layerSlots.forEach((g) => (g.innerHTML = ""));
     hotEls = {};
     // A step exit only shows where this position has that link.
     const all = scene(current).hotspots || [];
@@ -282,7 +293,7 @@
     for (const h of all) {
       if (shown.includes(h)) drawHotspot(h);
       else if (h.cover && test(coverIf(h))) {
-        const g = fragment(h.cover, hotRoot);
+        const g = fragment(h.cover, hotParent(h));
         g.setAttribute("pointer-events", "none");
         applyScale(h, g);
       }
@@ -321,7 +332,16 @@
   }
 
   function drawHotspot(h) {
-    const g = el("g", { class: "hot" + (isExit(h) ? " exit" : ""), tabindex: 0, role: "button", "aria-label": h.label || h.id }, hotRoot);
+    // No shape: just art that comes and goes with its `if` (a slide's next line, the steam). Not
+    // clickable, no hover, not focusable.
+    if (!h.shape) {
+      const g = el("g", { "pointer-events": "none" }, hotParent(h));
+      hotEls[h.id] = g;
+      if (h.art) { const node = fragment(h.art, g); if (h.anim) animInStep(node, h.anim); }
+      applyScale(h, g);
+      return;
+    }
+    const g = el("g", { class: "hot" + (isExit(h) ? " exit" : ""), tabindex: 0, role: "button", "aria-label": h.label || h.id }, hotParent(h));
     hotEls[h.id] = g;
     // anim: in step with a layer that has the same one (something inside the spyglass lens).
     if (h.art) { const node = fragment(h.art, g); if (h.anim) animInStep(node, h.anim); }
@@ -854,7 +874,7 @@
     ME = w.you.id;
     const [VW, VH] = CFG.meta.viewBox || [680, 400];
     svg.setAttribute("viewBox", `0 0 ${VW} ${VH}`);
-    document.title = `${w.activity.name} · Hollia`;
+    document.title = `Hollia - ${w.activity.name}`;
     presence.players = {};
     w.players.forEach((p) => (presence.players[p.id] = p));
     // The server remembers where you were, so a refresh or reconnect puts you back.

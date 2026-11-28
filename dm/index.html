@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Hollia DM</title>
+<title>Hollia - DM</title>
 <style>
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
@@ -34,6 +34,9 @@
   .pill.open { background: #2d4a2a; color: #9be08f; }
   .pill.closed { background: #3a2a2a; color: #ff9f9f; }
   .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  .script { margin-top: 12px; padding: 8px 12px; border-left: 3px solid #c9a24a; background: rgba(201, 162, 74, .06); }
+  .script p { margin: 6px 0; font-family: Georgia, "Times New Roman", serif; font-size: 16px; line-height: 1.4; }
+  .script ul { margin: 6px 0 2px; padding-left: 20px; color: #c8bca0; font-size: 13px; }
   .spacer { flex: 1; }
 
   button { font: 14px system-ui, sans-serif; background: #2f2745; color: #e9e2d0; border: 1px solid #4a3f66;
@@ -220,7 +223,7 @@
         mismatch = Hollia.versionProblem(m); toast(mismatch); ws.close(); return;
       }
       if (m.t === "dm-welcome") { mismatch = null; delay = 1000; setStatus("online"); store.set("hollia.dmKey", key); $("login").hidden = true; $("app").hidden = false; }
-      else if (m.t === "dm-state") { state = m; if (m.now) clockSkew = m.now - Date.now(); render(); }
+      else if (m.t === "dm-state") { state = m; if (m.now) clockSkew = m.now - Date.now(); render(); checkWaiting(); }
       else if (m.t === "dm-made-item") { selectMade = m.id; $("makeForm").reset(); toast(`Made "${m.name}". It's picked in every Give / Put here menu.`); }
       else if (m.t === "dm-log") { logEntries = m.entries; renderLog(); }
       else if (m.t === "dm-log-entry") { logEntries.push(m.entry); if (logEntries.length > 3000) logEntries.splice(0, 1000); renderLog(); }
@@ -241,6 +244,45 @@
   window.dmRoam = (activity, roamer = "creature", stage = "last", minutes = 10) =>
     send(activity, { do: "tool", action: { roam: roamer, stage, minutes } });
 
+  /* ---------- "waiting on you" ding ----------
+     Something new waiting on the DM, in any activity (a lost minigame try's verdict, a shell pick
+     to mark): a short "ding ding ding" (made here with Web Audio, no sound file), and the tab title
+     shows how many are waiting. Browsers only allow sound after a click or key on the page, so the
+     first one unlocks it. */
+  let audio = null, waitingSeen = null;
+  const unlockAudio = () => {
+    try { audio ||= new (window.AudioContext || window.webkitAudioContext)(); if (audio.state === "suspended") audio.resume(); } catch {}
+  };
+  addEventListener("pointerdown", unlockAudio);
+  addEventListener("keydown", unlockAudio);
+  function ding() {
+    if (!audio || audio.state !== "running") return;
+    const t0 = audio.currentTime;
+    for (let i = 0; i < 3; i++) {
+      const t = t0 + i * 0.28;
+      for (const [freq, vol] of [[1318.5, 0.22], [2637, 0.06]]) { // bell: note plus a faint octave
+        const o = audio.createOscillator(), g = audio.createGain();
+        o.type = "sine"; o.frequency.value = freq;
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(vol, t + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.45);
+        o.connect(g).connect(audio.destination);
+        o.start(t); o.stop(t + 0.5);
+      }
+    }
+  }
+  function checkWaiting() {
+    const now = new Set();
+    for (const a of state.activities) for (const p of a.players) {
+      const g = p.game;
+      if (g?.pending) now.add(`${a.id}|${p.id}|try|${g.game}|${g.level}|${g.pending.result}`);
+      if (g?.shells?.stage === "wait") now.add(`${a.id}|${p.id}|shells|${g.shells.round}`);
+    }
+    if ([...now].some((k) => !waitingSeen?.has(k))) ding();
+    waitingSeen = now;
+    document.title = now.size ? `(${now.size}) Hollia - DM` : "Hollia - DM";
+  }
+
   /* ---------- render ---------- */
   // While a move dropdown is focused (maybe open), live updates wait: redrawing would close it.
   // It catches up when the dropdown loses focus.
@@ -252,8 +294,8 @@
     const keep = {}, focused = document.activeElement?.dataset?.field;
     let caret = null;
     try { const ae = document.activeElement; if (focused && ae.selectionStart != null) caret = [ae.selectionStart, ae.selectionEnd]; } catch {}
-    // Coin boxes show the live value unless the DM is typing in one.
-    document.querySelectorAll("[data-field]").forEach((i) => { if (!i.classList.contains("coins") || i === document.activeElement) keep[i.dataset.field] = i.value; });
+    // Coin boxes (and other "live" boxes) show the live value unless the DM is typing in one.
+    document.querySelectorAll("[data-field]").forEach((i) => { if (!(i.classList.contains("coins") || i.classList.contains("live")) || i === document.activeElement) keep[i.dataset.field] = i.value; });
 
     $("acts").innerHTML = state.activities.map((a) => {
       const online = a.players.filter((p) => p.online);
@@ -325,12 +367,14 @@
           <span class="muted">Move everyone to</span>
           <select data-field="all-${esc(a.id)}">${roomOpts()}</select>
           <button data-do="move-all" data-act="${esc(a.id)}">Move</button>
-        </div>` : ""}
+        </div>
+        ${scriptRow(a, keep["all-" + a.id])}` : ""}
         ${(a.toggles || []).length ? `
         <div class="row">
           <span class="muted">Scene</span>
           ${a.toggles.map((g) => toggleHtml(a, g)).join("")}
         </div>` : ""}
+        ${roamersRow(a)}
         ${coinsRow(a)}
         ${a.scenes ? `
         <div class="row">
@@ -456,6 +500,46 @@
       ${S.stage === "wait" ? `<button class="primary" data-shells="1" ${at}>Right</button><button class="danger" data-shells="0" ${at}>Wrong</button>` : ""}
       <button data-shells-end="${S.round * (a.shellsAnte?.[S.game] ?? 1)}" data-name="${esc(p.name)}" ${at} title="Safety valve: call the game off and give back the coins they put in">End game (refund)</button>
     </div></td></tr>`;
+  }
+
+  /* Slide script (a theater slide's dm: { script, notes }, DM page only): what to read and remember
+     for the slide most online players are on, else the one picked in "Move everyone to". */
+  function scriptRow(a, picked) {
+    const slides = (a.scenes || []).filter((s) => s.dm);
+    if (!slides.length) return "";
+    const count = {};
+    for (const p of a.players) if (p.online && !p.bot) count[p.scene] = (count[p.scene] || 0) + 1;
+    const onId = Object.keys(count).sort((x, y) => count[y] - count[x]).find((id) => slides.some((s) => s.id === id));
+    const s = slides.find((x) => x.id === onId) || slides.find((x) => x.id === (picked ?? a.scenes[0]?.id));
+    if (!s) return `<div class="row"><span class="muted">Slide script: shows for the slide players are on (or the one picked above)</span></div>`;
+    return `<div class="script">
+      <div class="muted">Slide script: <b>${esc(s.name)}</b> ${s.id === onId ? "(on screen now)" : "(picked above)"}</div>
+      ${(s.dm.script || []).map((l) => `<p>${esc(l)}</p>`).join("")}
+      ${(s.dm.notes || []).length ? `<ul>${s.dm.notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul>` : ""}
+    </div>`;
+  }
+
+  /* Roamers (a.roamers, e.g. the winged creature): how long it waits at each stop before flying
+     home. The DM can ease it mid-session without players noticing; takes effect from its next
+     hop. The box shows the live value unless the DM is typing in it ("live" class). */
+  function roamersRow(a) {
+    if (!(a.roamers || []).length) return "";
+    return a.roamers.map((r) => {
+      const at = `data-act="${esc(a.id)}" data-roamer="${esc(r.id)}"`;
+      return `<div class="row"><span class="muted">${esc(r.name)} waits</span>
+        <input type="number" class="live" min="3" max="600" style="width:5em" value="${r.stay}" data-field="stay-${esc(a.id)}-${esc(r.id)}" data-stay ${at}> s
+        <button data-stay-set ${at}>Set</button>
+        ${r.stay !== r.base ? `<button data-stay-reset ${at} title="Back to the world's ${r.base} s">Back to ${r.base} s</button>` : `<span class="muted">(world's default)</span>`}
+      </div>`;
+    }).join("");
+  }
+  function setStay(el) {
+    const box = document.querySelector(`input[data-stay][data-act="${CSS.escape(el.dataset.act)}"][data-roamer="${CSS.escape(el.dataset.roamer)}"]`);
+    const n = Math.round(+box.value);
+    if (!(n >= 3 && n <= 600)) return toast("Wait time: 3 to 600 seconds.");
+    send(el.dataset.act, { do: "tool", action: { stay: el.dataset.roamer, seconds: n } });
+    box.blur();
+    toast(`Waits ${n} s from its next hop.`);
   }
 
   /* Minigame coins: how many coins each game has paid out to players (p.gameCoins, from the server;
@@ -799,6 +883,11 @@
       }
       if (d.placeGive) return send(act, { do: "inv", action: { place: d.placeGive, give: document.querySelector(`[data-field="pgive-${CSS.escape(act)}-${d.idx}"]`).value } });
     }
+    // Roamer wait time.
+    const ss = e.target.closest("[data-stay-set]");
+    if (ss) return setStay(ss);
+    const sr = e.target.closest("[data-stay-reset]");
+    if (sr) return send(sr.dataset.act, { do: "tool", action: { stay: sr.dataset.roamer, seconds: null } });
     // Scene toggles (the world's dmToggles): switch a world flag on/off for everyone.
     const w = e.target.closest("[data-wflag]");
     if (w) {
@@ -843,6 +932,9 @@
     }
   });
   $("acts").addEventListener("change", (e) => {
+    // "Move everyone to" picked: show that slide's script (scriptRow) right away.
+    const mv = e.target.closest('select[data-field^="all-"]');
+    if (mv) { mv.blur(); return render(); }
     // A preset announcement: fills the Announce box ({player} from "Who…"), to tweak, then Enter or Send.
     const pre = e.target.closest("select[data-announce-preset]");
     if (pre) {
@@ -908,6 +1000,8 @@
     if (ab && e.key === "Enter") { e.preventDefault(); return sendAnnounce(ab.dataset.announceBox); }
     const rs = e.target.closest("textarea[data-rsay]");
     if (rs && e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); return sayRound(rs.dataset.act, rs.dataset.rsay); }
+    const st = e.target.closest("input[data-stay]");
+    if (st && e.key === "Enter") { e.preventDefault(); return setStay(st); }
     const c = e.target.closest("input.coins");
     if (c && e.key === "Enter") {
       const n = Math.floor(+c.value);
